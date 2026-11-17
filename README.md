@@ -1,6 +1,6 @@
 # Shopify Merchant Analytics
 
-**Zero Uni · Project 1.** A Next.js app where a Shopify merchant asks questions about their store in their own words (*"jakets returnd last wk"*, *"best seller since summer?"*, *"are repeat customers growing or not"*) and gets an answer, plus the data to draw a chart, streamed back.
+**Zero Uni · Project 1.** A Next.js app where a Shopify merchant asks questions about their store in their own words (*"jakets returnd last wk"*, *"best seller since summer?"*, *"are repeat customers growing or not"*) and gets a chart and a short answer, streamed back. While they wait, the reply shows the steps the assistant is taking, in plain words.
 
 A free LLM on OpenRouter never reads the raw data and never does arithmetic. It picks **one** report tool, fills in **exact dates**, and then puts the tool's result into plain words. All numbers come from a deterministic query engine over the store's order history.
 
@@ -23,6 +23,9 @@ Step 2: same model, no tools allowed (toolChoice "none")
    │   Parka accounted for 3 of those returns ($657.00), with 1 Northridge Insulated Jacket returned ($135.15)."
    ▼
 Streamed to the client: tool call → tool result (rows + chart spec) → answer text
+   │
+   ▼
+Chat page: grey steps while it works → chart pops in, steps fold to "Show steps (3)" → answer under the chart
 ```
 
 ## Status
@@ -33,11 +36,12 @@ Streamed to the client: tool call → tool result (rows + chart spec) → answer
 | Query engine `queryStoreData`: metrics, breakdowns, filters, sorting, warnings | ✅ Done |
 | Report tools described in merchants' own words (sales, returns, repeat customers) | ✅ Done |
 | Streaming chat route `POST /api/chat`: free OpenRouter model, one tool call, exact dates | ✅ Done |
-| Chart spec in every tool result (`stat` / `line` / `bar`) | ✅ Done |
+| Chart spec in every tool result (`stat` / `line` / `bar` / `table`) | ✅ Done |
+| Chat page: grey steps while waiting, chart from the tool's `chart` field, answer under it | ✅ Done |
+| Returned-order-lines list (`returnsReport` with `view: "list"`) | ✅ Done |
 | Data API (`/api/analytics/query`, `/api/analytics/dataset`) | ✅ Done |
-| Tests (31, no API key needed; numbers checked against values computed separately) | ✅ Done |
-| Live-tested on a free model with real merchant questions (see below) | ✅ Done |
-| Chat UI that renders the charts | ⏭ Next step |
+| Tests (42, no API key needed; numbers checked against values computed separately) | ✅ Done |
+| Live-tested on a free model with real merchant questions, in the API and in the browser | ✅ Done |
 
 ## Quick start
 
@@ -46,7 +50,7 @@ Requires Node.js 22+.
 ```bash
 npm install
 cp .env.example .env.local      # then paste your OpenRouter key into it
-npm run dev                     # http://localhost:3000
+npm run dev                     # open http://localhost:3000 and ask a question
 ```
 
 ```bash
@@ -65,6 +69,62 @@ Other scripts: `npm test` (vitest), `npm run typecheck`, `npm run lint`, `npm ru
 | `OPENROUTER_MODEL` | no | One model ID, or a comma-separated list tried in order. Defaults to the free models below. |
 | `STORE_TODAY` | no | The date treated as "today" (`YYYY-MM-DD`). Defaults to the last day of data, `2025-10-27`. |
 
+## The chat page
+
+[`src/app/page.tsx`](src/app/page.tsx) is the merchant's chat. It uses the AI SDK's `useChat()` hook with `/api/chat`, and starts with six questions merchants actually asked (from the spreadsheet) as one-click suggestions.
+
+**What the merchant sees in each reply**, in the same spot where the answer will appear:
+
+1. **While waiting: the steps, in muted grey.** There's no chart skeleton and no spinner. The steps are built from the tool call and tool result that `/api/chat` already streams ([`steps.ts`](src/lib/assistant/steps.ts)), written in plain words, not code or JSON:
+   - *Choosing a report…*
+   - *Running the returns report for Oct 14–27, 2025: returned units, returns and refunds by product, Outerwear only…*
+   - *Got results for 2 products*
+2. **When the result lands: the chart pops in**, and the steps fold into a small closed toggle above it, **"Show steps (3)"**. Opening it shows every step. It stays closed by default, so it doesn't take space or attention from the chart.
+3. **The short answer streams in under the chart.**
+4. **If something goes wrong** (the free model is busy, the daily free limit is used up, the network drops), the steps stay visible with the failed one marked ✕. A friendly message with a **Try again** button takes the chart's place.
+
+The report itself runs in milliseconds, so the tool call and its result usually arrive in the same instant. If they were shown as they arrive, the merchant would only ever read "Choosing a report…". So each real step stays on screen as the newest line for at least 0.45 seconds before the next one appears, and the chart lands after the last step. Nothing is invented: only steps that have already happened are shown.
+
+**Measured in Chrome** for *"which coats got returned most over the last couple weeks?"* (from the spreadsheet). A `MutationObserver` recorded every change to the reply:
+
+| Time | What the reply showed |
+| --- | --- |
+| 0.0s | Choosing a report… (grey) |
+| 2.0s | ✓ Chose the returns report · Running the returns report for Oct 14–27, 2025: … Outerwear only… |
+| 2.5s | Steps folded into "Show steps (3)" (closed). Chart: returned units and returns by product, 4 returns, $792.15 refunded |
+| 3.8s | Answer streaming under the chart: "…the Alpine Down Parka was your most-returned coat with 3 units returned ($657.00 in refunds), followed by the Northridge Insulated Jacket with 1 unit ($135.15)…" |
+
+**How each result is drawn.** The shape comes from the tool result's `chart.type`, never from the model ([`report-view.tsx`](src/components/report/report-view.tsx)):
+
+- `stat`: metrics cards.
+- `line`: a 2px line per metric with a hover crosshair and tooltip; empty weeks show as $0.
+- `bar`: horizontal bars, so long product names stay readable, with the value at the tip.
+- `table`: row-by-row, for the returned-items list and for two-breakdown results.
+
+Every chart also has:
+
+- **Totals as cards above the chart, and a "View as table" toggle.**
+- **Formatting:** money as `$1,234.56`, percentages as `38.46%`, dates as `Oct 14–27, 2025`.
+- **Warnings under the chart,** with a ⚠ and the text.
+- **One axis only.** Only metrics that share the first metric's unit are plotted (e.g. net sales and refunds, both money). The rest, like a return rate, stay in the cards and the table.
+- **Colours in light and dark mode** from a palette checked for colour-blind separation (`globals.css`). Text never uses a series colour.
+
+**Other questions checked in the browser** (numbers checked against the query engine):
+
+| Question | What came back |
+| --- | --- |
+| sales by week last 8 weeks | Line, Sep 1 – Oct 26: $2,310.15; hover on the peak shows "Week of Oct 13, 2025 · $635.40". |
+| show me the returned orders from the last 30 days | Table of 6 returned lines, newest first, totals 6 returns / $994.94. |
+| whats my avg sale per customer this month | Metrics card: $188.44 (Oct 1–27: $2,261.25 across 12 customers). |
+| Hi team, … which parkas and puffers had the most returns from Sept 1 through last Sunday? … by product | Bar, Sep 1 – Oct 26: Alpine Down Parka 3 ($657.00), Northridge Insulated Jacket 2 ($263.94), total $920.94. |
+| Can I see sales and returns for jackets last week? Need both on one chart… | Bar of net sales by product (one axis); return rate in the cards. The free model's daily limit ran out before the answer step. That's how we found that 429 errors were reaching the merchant as a generic message (now fixed, see below). |
+| (any question, with a model name that doesn't exist) | Step marked ✕ "Couldn't reach the AI model", friendly message and Try again in place of the chart. |
+
+Two fixes came out of the browser testing:
+
+- **"Returns 0" in the sales report was easy to misread.** In `salesReport`, returns belong to the orders *placed* in the period (so a return rate compares like with like), but 4 jackets were *sent back* that week. Sales results with return metrics now carry a warning, *"Returns here are from orders placed in these dates. Counted by return date, 4 items were sent back during these dates."*, which shows under the chart and which the model passes on.
+- **Rate-limit errors are now named correctly.** Retries wrap the provider's 429 in an `AI_RetryError`, so it used to fall through to "Something went wrong". [`errors.ts`](src/lib/assistant/errors.ts) unwraps it. A short busy spell says "try again in a minute"; the daily free cap says it resets at midnight UTC.
+
 ## The chat route: `POST /api/chat`
 
 **Request:** `{ "question": "..." }` for a single question, or `{ "messages": UIMessage[] }`, which is what the AI SDK's `useChat()` sends.
@@ -82,7 +142,7 @@ How it guarantees **one tool call with exact dates**:
 - **Answers only from the result.** Temperature is 0. The instructions say to use only numbers from the tool result and to pass on its warnings (dates with no data, products the store doesn't sell).
 - **Charts that draw correctly.** Day, week and month breakdowns always come back complete and in date order, even if the model asks to sort them, so they draw as a line.
 
-Free models sometimes time out partway through a response. `streamRetries: 2` reruns just that step. If the model is still unavailable, the stream ends with a readable message ("The free AI model is busy right now…") rather than a stack trace.
+Free models sometimes time out partway through a response. `streamRetries: 2` reruns just that step. If the model is still unavailable, the stream ends with a readable message ("The free AI model is busy right now…") rather than a stack trace ([`errors.ts`](src/lib/assistant/errors.ts)).
 
 ### Live results (free model, real questions from the spreadsheet)
 
@@ -155,7 +215,7 @@ The job is simple: pick one of four tools and copy dates from a table. So a fast
 | `nvidia/nemotron-3.5-lightning:free` | 1 / 2 | Gave up on the sneaker question (`cannotAnswer`). | 3–7s |
 | `google/gemma-4-31b-it:free` | 0 / 2 | No output (timed out). | — |
 
-The default in [`model.ts`](src/lib/assistant/model.ts) is the top three, in that order. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`. OpenRouter rate-limits free models per minute and per day, and each question uses two model requests.
+The default in [`model.ts`](src/lib/assistant/model.ts) is the top three, in that order. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`. OpenRouter rate-limits free models per minute and per day. Without credits on the account the daily cap is 50 requests, and each question uses two, so about 25 questions a day.
 
 ## Chart shapes
 
@@ -166,7 +226,7 @@ The rule:
 - **Bar:** comparing products, categories, channels or reasons.
 - **Table:** row-by-row detail, or two breakdowns at once.
 
-The `chart` field in each tool result already chooses a metrics card (`stat`), `line` or `bar` from the shape of the result. `table` is the next step (see the notes after the table).
+The `chart` field in each tool result chooses a metrics card (`stat`), `line`, `bar` or `table` from the shape of the result ([`chart.ts`](src/lib/analytics/chart.ts)), and the chat page draws exactly that.
 
 | Metric | Tool and breakdown | Shape | Why |
 | --- | --- | --- | --- |
@@ -189,7 +249,8 @@ The `chart` field in each tool result already chooses a metrics card (`stat`), `
 
 Notes:
 
-- **Not built yet:** the returned-order-lines table needs a list option on `returnsReport`. Today that tool only groups returns, and two-breakdown results are drawn as grouped bars.
+- **The returned-order-lines list** is `returnsReport` with `view: "list"` ([`list.ts`](src/lib/analytics/list.ts)). It returns one row per returned line, newest first: date returned, order, product, size / colour, reason, refund.
+- **Two breakdowns at once** (e.g. size and reason) always come back as `table`.
 - **Use weeks or months for lines, not days.** The data has 20 orders in six months, so a daily line would be mostly zeros.
 - **The monthly repeat share swings a lot**, between 0% and 100%, because some months have only one or two orders. Show the order count beside it.
 
@@ -259,13 +320,13 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
   "totalRows": 11,
   "truncated": true,
   "warnings": [],                         // e.g. unknown filter values, period outside the data
-  "chart":   { "type": "bar", "title": "Net sales by product", "x": {…}, "seriesBy": null, "metrics": [ … ] }
+  "chart":   { "type": "bar", "title": "Net sales by product", "x": {…}, "metrics": [ … ] }
 }
 ```
 
 (`chart` is added by the chat tools.)
 
-- **Charts.** `columns` and `chart` tell a UI how to draw the result without guessing. A time breakdown becomes a `line` chart, a category breakdown a `bar` chart, and no breakdown a `stat` tile. With two dimensions, `seriesBy` splits the result into one series per value.
+- **Charts.** `columns` and `chart` tell a UI how to draw the result without guessing. A time breakdown becomes a `line` chart, a category breakdown a `bar` chart, no breakdown a `stat` card, and two breakdowns a `table`.
 - **Empty periods.** A single time breakdown includes empty buckets as zeros, so trend charts don't skip periods. Ratios that can't be computed are `null`, not `0`.
 - **Warnings.** They tell the model what to pass on to the merchant. If a filter names a channel the store doesn't have, the warning lists the ones that exist. If the dates fall outside the data, it gives the range that has data.
 
@@ -285,6 +346,7 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 
 | Endpoint | Purpose |
 | --- | --- |
+| `GET /` | The chat page. |
 | `POST /api/chat` | Ask a question. Streams the tool call, result and answer. |
 | `POST /api/analytics/query` | Run `queryStoreData` directly with a JSON body. An invalid query returns `400` with field errors. |
 | `GET /api/analytics/dataset` | What the data contains: date coverage, products, channels, return reasons, metrics, dimensions. |
@@ -298,18 +360,32 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 │   └── merchant-report-requests-2025-10-27.xlsx # 30 real merchant questions; source of the tool wording
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx                  # Overview: dataset summary + example queries
+│   │   ├── page.tsx                  # The chat page (suggested questions from the spreadsheet)
+│   │   ├── globals.css               # Colour tokens (light + dark), chart palette, pop-in animation
 │   │   └── api/
 │   │       ├── chat/route.ts         # POST: streaming chat (OpenRouter + AI SDK)
 │   │       └── analytics/
 │   │           ├── query/route.ts    # POST: run queryStoreData
 │   │           └── dataset/route.ts  # GET: describeDataset
+│   ├── components/
+│   │   ├── chat/
+│   │   │   ├── chat.tsx              # useChat(), message list, input, suggestions
+│   │   │   ├── assistant-reply.tsx   # Grey steps → chart + "Show steps (N)" → answer; error state
+│   │   │   └── answer-text.tsx       # The model's short answer (paragraphs, bullets, bold)
+│   │   └── report/
+│   │       ├── report-view.tsx       # Picks cards / line / bar / table from chart.type; warnings
+│   │       ├── line-view.tsx, bar-view.tsx, chart-parts.tsx   # Recharts, one axis, tooltip, legend
+│   │       └── data-table.tsx        # Row-by-row table (and "View as table")
 │   └── lib/
+│       ├── format.ts                 # Money, percentages, dates, axis ticks
 │       ├── assistant/                # The LLM side
 │       │   ├── tools.ts              # salesReport, returnsReport, repeatCustomersReport, cannotAnswer
 │       │   ├── instructions.ts       # System prompt: today, date table, catalogue, one-call rule
 │       │   ├── answer.ts             # streamMerchantAnswer(): step 1 tool call, step 2 answer
-│       │   └── model.ts              # OpenRouter free model(s) from env
+│       │   ├── model.ts              # OpenRouter free model(s) from env
+│       │   ├── steps.ts              # Streamed tool call → plain-English steps
+│       │   ├── errors.ts             # Provider errors → a sentence the merchant can act on
+│       │   └── ui-types.ts           # Typed chat messages for useChat()
 │       ├── analytics/                # The query engine (no LLM)
 │       │   ├── query.ts              # queryStoreData(): filter → group → compute → sort → limit
 │       │   ├── schema.ts             # Zod input schema
@@ -319,13 +395,15 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 │       │   ├── periods.ts            # Merchant time phrases → exact dates
 │       │   ├── dates.ts              # Day/week/month bucketing
 │       │   ├── chart.ts              # Chart spec from a result
+│       │   ├── list.ts               # Returned items, one row per line
 │       │   ├── describe.ts           # describeDataset()
 │       │   └── examples.ts           # Example questions → queries
 │       └── store-data/               # Loading the raw CSV
 │           ├── csv.ts, parse.ts, load.ts, types.ts
 └── tests/
     ├── analytics.test.ts             # Query engine
-    └── assistant.test.ts             # Dates, tools, and the two-step chat flow (mock model)
+    ├── assistant.test.ts             # Dates, tools, and the two-step chat flow (mock model)
+    └── chat-page.test.ts             # Chart shapes, returns list, step wording, formatting, error messages
 ```
 
 To add a metric, add an entry to `METRICS` in `metrics.ts`. To add a dimension, add one to `DIMENSIONS` in `dimensions.ts`. To make either available to the model, also add it to the list for the right tool in `tools.ts`.
@@ -345,4 +423,4 @@ Some merchant questions ask about things this store doesn't have: sneakers, bags
 
 ## Tech
 
-Next.js 16 (App Router, TypeScript), Vercel AI SDK 7, OpenRouter (`@openrouter/ai-sdk-provider`), Zod 4, Tailwind CSS 4, Vitest.
+Next.js 16 (App Router, TypeScript), Vercel AI SDK 7 with `@ai-sdk/react` (`useChat`), OpenRouter (`@openrouter/ai-sdk-provider`), Recharts 3, Zod 4, Tailwind CSS 4, Vitest.
