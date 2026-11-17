@@ -157,6 +157,42 @@ The job is simple: pick one of four tools and copy dates from a table. So a fast
 
 The default in [`model.ts`](src/lib/assistant/model.ts) is the top three, in that order. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`. OpenRouter rate-limits free models per minute and per day, and each question uses two model requests.
 
+## Chart shapes
+
+The rule:
+
+- **Metrics card:** one number.
+- **Line:** change over time.
+- **Bar:** comparing products, categories, channels or reasons.
+- **Table:** row-by-row detail, or two breakdowns at once.
+
+The `chart` field in each tool result already chooses a metrics card (`stat`), `line` or `bar` from the shape of the result. `table` is the next step (see the notes after the table).
+
+| Metric | Tool and breakdown | Shape | Why |
+| --- | --- | --- | --- |
+| Net sales over time | `salesReport` by week or month | Line | Shows whether sales are going up or down. |
+| Best sellers (net sales or units by product) | `salesReport` by product | Bar | Ranks products so the top sellers stand out. |
+| Sales by channel or category | `salesReport` by sales_channel or category | Bar | Compares a handful of channels or categories side by side. |
+| Total sales, orders, units, customers for a period | `salesReport`, no breakdown | Metrics card | Each is a single number. |
+| Average order value, sales per customer, units per order | `salesReport`, no breakdown | Metrics card | Each is one average for the period. |
+| Gross sales, discounts, discount rate, net revenue | `salesReport`, no breakdown | Metrics card | Single totals the merchant reads at a glance. |
+| Return rate by category | `salesReport` by category | Bar | Compares how often each category comes back, relative to what sold. |
+| Returns and refunds by product or category | `returnsReport` by product or category | Bar | Shows which products come back the most. |
+| Returns by reason | `returnsReport` by return_reason | Bar | Shows why items come back, e.g. sizing vs. changed mind. |
+| Returns over time | `returnsReport` by week or month | Line | Shows whether returns are rising. |
+| Total returns, refunds, customers with returns | `returnsReport`, no breakdown | Metrics card | Each is a single number. |
+| Returns by size and reason ("is it a sizing thing?") | `returnsReport` by size and return_reason | Table | Two breakdowns at once read more clearly as a grid. |
+| List of returned order lines (order, date, product, size, reason, refund) | `returnsReport` list option | Table | Row-by-row detail the merchant can scan before a reorder. |
+| Repeat order share by month | `repeatCustomersReport` by month | Line | Answers "are repeat customers growing or not". |
+| Repeat customers, repeat orders for a period | `repeatCustomersReport`, no breakdown | Metrics card | Each is a single count. |
+| What repeat customers buy | `repeatCustomersReport` by product, filter repeat | Bar | Ranks the products people come back for. |
+
+Notes:
+
+- **Not built yet:** the returned-order-lines table needs a list option on `returnsReport`. Today that tool only groups returns, and two-breakdown results are drawn as grouped bars.
+- **Use weeks or months for lines, not days.** The data has 20 orders in six months, so a daily line would be mostly zeros.
+- **The monthly repeat share swings a lot**, between 0% and 100%, because some months have only one or two orders. Show the order count beside it.
+
 ## The query engine: `queryStoreData`
 
 All three report tools are thin wrappers around one function:
