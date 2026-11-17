@@ -1,9 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
   cacheComponents: true,
   partialPrefetching: true,
+  // The order export is read from disk at runtime; make sure it ships with the server bundle.
+  outputFileTracingIncludes: {
+    "/api/analytics/*": ["./data/**/*"],
+  },
   turbopack: {
     rules: {
       "*.css": {
