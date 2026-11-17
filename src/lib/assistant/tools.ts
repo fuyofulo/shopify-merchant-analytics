@@ -4,6 +4,7 @@ import { z } from "zod";
 import {
   chartFor,
   DIMENSIONS,
+  listReturnedItems,
   queryStoreData,
   storeQueryFiltersSchema,
   type DateField,
@@ -26,7 +27,7 @@ Counts orders placed in the period. To compare returns with sales ("Returns too 
 
   returnsReport: `See how your returns are doing: which products or categories got returned the most, how much you refunded, and why they came back, so you can tell if it's a sizing thing before you reorder.
 Merchants ask: "which jackets came back as returns last week", "jakets returnd last wk", "how are returns doing", "returns by category this month", "returns by product last 30 days", "most returned category", "which styles are coming back the most? Is it a sizing thing?", "which coats got returned most over the last couple weeks".
-Counts items that came back during the period (by return date). For "why" and sizing questions, group by return_reason or size. For a return rate or returns compared with sales, use salesReport instead.`,
+Counts items that came back during the period (by return date). For "why" and sizing questions, group by return_reason or size. To see the returned order lines one by one, set view to "list". For a return rate or returns compared with sales, use salesReport instead.`,
 
   repeatCustomersReport: `See how many customers came back to order a 2nd time and what share of your orders come from repeat customers each month, so you know whether repeat customers are growing or not.
 Merchants ask: "are repeat customers growing or not", "what % of orders are from returning customers lately", "repeat customer share by month", "how many customers came back twice", "are more ppl ordering a 2nd time now".
@@ -63,38 +64,46 @@ const REPEAT_DIMENSIONS = [
   "day", "week", "month", "customer_type", "product", "category", "sales_channel",
 ] as const satisfies readonly DimensionKey[];
 
-/** Input schema shared by the report tools, limited to the metrics and dimensions each one allows. */
-function reportInputSchema<
+/** Fields shared by the report tools, limited to the metrics and dimensions each one allows. */
+function reportFields<
   const M extends readonly [MetricKey, ...MetricKey[]],
   const D extends readonly [DimensionKey, ...DimensionKey[]],
 >(metrics: M, dimensions: D) {
-  return z
-    .object({
-      startDate: z.iso.date().describe("Exact first day, inclusive, YYYY-MM-DD. Copy it from the date table in your instructions."),
-      endDate: z.iso.date().describe("Exact last day, inclusive, YYYY-MM-DD."),
-      metrics: z.array(z.enum(metrics)).min(1).describe("What to measure. The first one ranks the rows."),
-      groupBy: z
-        .array(z.enum(dimensions))
-        .max(2)
-        .optional()
-        .describe("Break down by up to two of these, e.g. [\"week\"] or [\"product\"]. Leave out for a single total."),
-      filters: storeQueryFiltersSchema.optional(),
-      sortBy: z
-        .enum(metrics)
-        .optional()
-        .describe("Rank rows by this metric instead of the first one. Ignored for day/week/month breakdowns, which stay in date order."),
-      sortDirection: z.enum(["asc", "desc"]).optional().describe("\"desc\" (default) for most/top, \"asc\" for least/worst."),
-      limit: z.number().int().min(1).max(50).optional().describe("Maximum rows, e.g. 10 for \"top 10\"."),
-    })
-    .refine((input) => input.startDate <= input.endDate, {
-      message: "startDate must be on or before endDate.",
-      path: ["endDate"],
-    });
+  return {
+    startDate: z.iso.date().describe("Exact first day, inclusive, YYYY-MM-DD. Copy it from the date table in your instructions."),
+    endDate: z.iso.date().describe("Exact last day, inclusive, YYYY-MM-DD."),
+    metrics: z.array(z.enum(metrics)).min(1).describe("What to measure. The first one ranks the rows."),
+    groupBy: z
+      .array(z.enum(dimensions))
+      .max(2)
+      .optional()
+      .describe("Break down by up to two of these, e.g. [\"week\"] or [\"product\"]. Leave out for a single total."),
+    filters: storeQueryFiltersSchema.optional(),
+    sortBy: z
+      .enum(metrics)
+      .optional()
+      .describe("Rank rows by this metric instead of the first one. Ignored for day/week/month breakdowns, which stay in date order."),
+    sortDirection: z.enum(["asc", "desc"]).optional().describe("\"desc\" (default) for most/top, \"asc\" for least/worst."),
+    limit: z.number().int().min(1).max(50).optional().describe("Maximum rows, e.g. 10 for \"top 10\"."),
+  };
 }
 
-const salesInput = reportInputSchema(SALES_METRICS, SALES_DIMENSIONS);
-const returnsInput = reportInputSchema(RETURNS_METRICS, RETURNS_DIMENSIONS);
-const repeatInput = reportInputSchema(REPEAT_METRICS, REPEAT_DIMENSIONS);
+const datesInOrder = (input: { startDate: string; endDate: string }) => input.startDate <= input.endDate;
+const datesInOrderError = { message: "startDate must be on or before endDate.", path: ["endDate"] };
+
+const salesInput = z.object(reportFields(SALES_METRICS, SALES_DIMENSIONS)).refine(datesInOrder, datesInOrderError);
+const returnsInput = z
+  .object({
+    ...reportFields(RETURNS_METRICS, RETURNS_DIMENSIONS),
+    view: z
+      .enum(["summary", "list"])
+      .optional()
+      .describe(
+        "\"summary\" (default) counts returns, grouped if asked. \"list\" shows one row per returned item (date, order, product, size, reason, refund): use it for \"show me the returns\", \"which orders were returned\", \"list of returned items\". metrics and groupBy are ignored for a list.",
+      ),
+  })
+  .refine(datesInOrder, datesInOrderError);
+const repeatInput = z.object(reportFields(REPEAT_METRICS, REPEAT_DIMENSIONS)).refine(datesInOrder, datesInOrderError);
 
 type ReportInput = z.output<typeof salesInput> | z.output<typeof returnsInput> | z.output<typeof repeatInput>;
 
@@ -113,8 +122,30 @@ function runReport(input: ReportInput, dateField: DateField = "order_date") {
       }
     : input;
   const result = queryStoreData({ ...query, groupBy, filters: input.filters ?? {}, dateField });
-  return { ...result, chart: chartFor(result) };
+  const warnings = [...result.warnings];
+
+  // In the sales report, returns belong to the orders placed in the period (so a return
+  // rate compares like with like). Say how many items came back during the period too,
+  // so "0 returns" is never mistaken for "nothing was sent back this week".
+  if (dateField === "order_date" && query.metrics.some((metric) => RETURN_METRIC_KEYS.has(metric))) {
+    const sentBack = queryStoreData({
+      startDate: input.startDate,
+      endDate: input.endDate,
+      metrics: ["returns"],
+      filters: input.filters ?? {},
+      dateField: "return_date",
+    }).totals.returns ?? 0;
+    warnings.push(
+      `Returns here are from orders placed in these dates. Counted by return date, ${sentBack} item${
+        sentBack === 1 ? " was" : "s were"
+      } sent back during these dates.`,
+    );
+  }
+
+  return { ...result, warnings, chart: chartFor(result) };
 }
+
+const RETURN_METRIC_KEYS = new Set<MetricKey>(["returns", "returned_units", "refunds", "return_rate", "customers_with_returns"]);
 
 /**
  * Returns always use the return date: "jackets returned last week" means
@@ -122,6 +153,9 @@ function runReport(input: ReportInput, dateField: DateField = "order_date") {
  * compare returns with sales of the same orders, so they live in salesReport.)
  */
 function runReturnsReport(input: z.output<typeof returnsInput>) {
+  if (input.view === "list") {
+    return listReturnedItems({ startDate: input.startDate, endDate: input.endDate, filters: input.filters, limit: input.limit });
+  }
   return runReport(input, "return_date");
 }
 

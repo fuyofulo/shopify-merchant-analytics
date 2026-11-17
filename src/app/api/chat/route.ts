@@ -1,6 +1,7 @@
-import { APICallError, type UIMessage } from "ai";
+import type { UIMessage } from "ai";
 
 import { streamMerchantAnswer } from "@/lib/assistant/answer";
+import { merchantErrorMessage } from "@/lib/assistant/errors";
 import { getChatModel, MissingApiKeyError } from "@/lib/assistant/model";
 
 /**
@@ -50,16 +51,8 @@ function toMessages(body: { messages?: unknown; question?: unknown }): UIMessage
   return null;
 }
 
-/** Turns provider errors into a message the merchant can act on. Details go to the server log. */
+/** Logs the full error on the server; the merchant gets a short sentence they can act on. */
 function describeError(error: unknown): string {
   console.error("[api/chat]", error);
-  if (APICallError.isInstance(error)) {
-    if (error.statusCode === 429) {
-      return "The free AI model is busy right now (rate limit). Please try again in a minute.";
-    }
-    if (error.statusCode === 401 || error.statusCode === 403) {
-      return "The OpenRouter API key was rejected. Check OPENROUTER_API_KEY.";
-    }
-  }
-  return "Something went wrong while answering. Please try again.";
+  return merchantErrorMessage(error);
 }

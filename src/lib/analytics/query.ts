@@ -131,7 +131,8 @@ export function dateRangeOf(dataset: readonly OrderLineItem[], dateField: DateFi
   return { startDate: dates[0], endDate: dates[dates.length - 1] };
 }
 
-function periodWarnings(requested: DateRange, available: DateRange | null, dateField: DateField): string[] {
+/** Warnings when the requested period is outside, or partly outside, the data. */
+export function periodWarnings(requested: DateRange, available: DateRange | null, dateField: DateField): string[] {
   const noun = dateField === "return_date" ? "Return" : "Order";
   if (!available) return [`The dataset contains no ${noun.toLowerCase()} dates.`];
 

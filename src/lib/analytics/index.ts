@@ -1,4 +1,4 @@
-export { queryStoreData, dateRangeOf } from "./query";
+export { queryStoreData, dateRangeOf, periodWarnings } from "./query";
 export type { StoreQueryResult, ResultColumn, ResultRow, ResultValue, DateRange } from "./query";
 export { storeQuerySchema, storeQueryFiltersSchema } from "./schema";
 export type { StoreQuery, StoreQueryInput, StoreQueryFilters } from "./schema";
@@ -9,6 +9,8 @@ export type { MetricKey, MetricFormat, MetricDefinition } from "./metrics";
 export { DIMENSIONS, DIMENSION_KEYS } from "./dimensions";
 export type { DimensionKey, DimensionDefinition, DateField } from "./dimensions";
 export { chartFor } from "./chart";
+export { listReturnedItems } from "./list";
+export type { ReturnedItemsQuery, ReturnedItemsResult } from "./list";
 export type { ChartSpec } from "./chart";
 export { resolvePeriods, weekdayOf } from "./periods";
 export type { NamedPeriod } from "./periods";

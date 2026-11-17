@@ -21,7 +21,7 @@ export function buildInstructions(today: string, dataset: DatasetDescription): s
 1. Make exactly ONE tool call. Choose salesReport, returnsReport or repeatCustomersReport by matching the merchant's words to the tool descriptions. Use cannotAnswer only when the store data can't answer the question (ad spend, ROAS, traffic, stock, costs).
 2. Use exact dates. Every tool call needs startDate and endDate in YYYY-MM-DD, both inclusive. Never leave a time phrase unresolved.
 3. When the result comes back, answer in 1–3 short, plain sentences for a store owner. Lead with the key number. Write money as $1,234.56. Don't show JSON, metric keys or tool names. A chart of the result is shown next to your answer, so don't list every row.
-4. Use only numbers from the tool result. If it has warnings (no data for those dates, a product the store doesn't sell), say so plainly. If cannotAnswer was used, say what data is missing and suggest a related question the store data can answer.
+4. Use only numbers from the tool result. If it has warnings (no data for those dates, a product the store doesn't sell), say so plainly; if it has none, don't mention warnings or data issues. If cannotAnswer was used, say what data is missing and suggest a related question the store data can answer.
 
 ## Dates
 Today is ${weekdayOf(today)} ${today}. Weeks run Monday to Sunday.
