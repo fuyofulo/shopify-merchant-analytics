@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import {
   chartFor,
+  DIMENSIONS,
   queryStoreData,
   storeQueryFiltersSchema,
   type DateField,
@@ -19,12 +20,13 @@ import {
  */
 export const TOOL_DESCRIPTIONS = {
   salesReport: `See your sales and revenue for any stretch of time (per day, by week, last month or since summer) and which products are your best sellers by revenue or by units sold, so you know what sold best before BFCM.
-Merchants ask: "best seller since summer?", "top 10 products by revenue Oct 1 to Oct 15", "sales by week last 8 weeks", "weekly revenue by product since august", "what sold best this season?", "sales per day last 14 days", "revenue last month", "top sellers by units since July 1", "sales been weird lately".
-"Sales" and "revenue" mean net_sales. For best sellers, group by product and rank by net_sales, or by units_sold when they say "by units". For trends, group by day, week or month.`,
+Merchants ask: "best seller since summer?", "top 10 products by revenue Oct 1 to Oct 15", "sales by week last 8 weeks", "weekly revenue by product since august", "what sold best this season?", "sales per day last 14 days", "revenue last month", "top sellers by units since July 1", "sales been weird lately", "total sales for each week from May through October".
+"Sales" and "revenue" mean net_sales. For best sellers, group by product and rank by net_sales, or by units_sold when they say "by units". For trends, group by day, week or month.
+Counts orders placed in the period. To compare returns with sales ("Returns too if it's easy", "are returns eating the sales bump", return rate), add returns, refunds or return_rate here.`,
 
   returnsReport: `See how your returns are doing: which products or categories got returned the most, how much you refunded, and why they came back, so you can tell if it's a sizing thing before you reorder.
-Merchants ask: "which jackets came back as returns last week", "jakets returnd last wk", "how are returns doing", "returns by category this month", "returns by product last 30 days", "most returned category", "which styles are coming back the most? Is it a sizing thing?", "are returns eating the sales bump".
-For "why" and sizing questions, group by return_reason or size. Asking only for returns, returned_units, refunds or customers_with_returns counts returns that happened in the period. Adding return_rate, net_sales or units_sold counts orders placed in the period and how many of them came back, so returns can be compared with sales.`,
+Merchants ask: "which jackets came back as returns last week", "jakets returnd last wk", "how are returns doing", "returns by category this month", "returns by product last 30 days", "most returned category", "which styles are coming back the most? Is it a sizing thing?", "which coats got returned most over the last couple weeks".
+Counts items that came back during the period (by return date). For "why" and sizing questions, group by return_reason or size. For a return rate or returns compared with sales, use salesReport instead.`,
 
   repeatCustomersReport: `See how many customers came back to order a 2nd time and what share of your orders come from repeat customers each month, so you know whether repeat customers are growing or not.
 Merchants ask: "are repeat customers growing or not", "what % of orders are from returning customers lately", "repeat customer share by month", "how many customers came back twice", "are more ppl ordering a 2nd time now".
@@ -37,7 +39,7 @@ Questions about dates outside the data still go to a report tool, because its wa
 
 const SALES_METRICS = [
   "net_sales", "units_sold", "orders", "customers", "average_order_value", "sales_per_customer",
-  "gross_sales", "discounts", "discount_rate", "net_revenue", "units_per_order", "refunds", "returns",
+  "gross_sales", "discounts", "discount_rate", "net_revenue", "units_per_order", "returns", "refunds", "return_rate",
 ] as const satisfies readonly MetricKey[];
 
 const SALES_DIMENSIONS = [
@@ -45,11 +47,7 @@ const SALES_DIMENSIONS = [
   "fulfillment_status",
 ] as const satisfies readonly DimensionKey[];
 
-const RETURN_ONLY_METRICS = ["returns", "returned_units", "refunds", "customers_with_returns"] as const satisfies readonly MetricKey[];
-
-const RETURNS_METRICS = [
-  ...RETURN_ONLY_METRICS, "return_rate", "net_sales", "units_sold", "net_revenue",
-] as const satisfies readonly MetricKey[];
+const RETURNS_METRICS = ["returns", "returned_units", "refunds", "customers_with_returns"] as const satisfies readonly MetricKey[];
 
 const RETURNS_DIMENSIONS = [
   "day", "week", "month", "product", "category", "variant", "size", "color", "return_reason", "sales_channel",
@@ -81,7 +79,10 @@ function reportInputSchema<
         .optional()
         .describe("Break down by up to two of these, e.g. [\"week\"] or [\"product\"]. Leave out for a single total."),
       filters: storeQueryFiltersSchema.optional(),
-      sortBy: z.enum(metrics).optional().describe("Rank rows by this metric instead of the first one."),
+      sortBy: z
+        .enum(metrics)
+        .optional()
+        .describe("Rank rows by this metric instead of the first one. Ignored for day/week/month breakdowns, which stay in date order."),
       sortDirection: z.enum(["asc", "desc"]).optional().describe("\"desc\" (default) for most/top, \"asc\" for least/worst."),
       limit: z.number().int().min(1).max(50).optional().describe("Maximum rows, e.g. 10 for \"top 10\"."),
     })
@@ -98,22 +99,30 @@ const repeatInput = reportInputSchema(REPEAT_METRICS, REPEAT_DIMENSIONS);
 type ReportInput = z.output<typeof salesInput> | z.output<typeof returnsInput> | z.output<typeof repeatInput>;
 
 /** Runs a report and attaches a chart spec, so the UI can draw it straight from the tool result. */
-function runReport(input: ReportInput, dateField: DateField = "order_date", forceReturned = false) {
-  const filters = forceReturned && input.filters?.returned === undefined ? { ...input.filters, returned: true } : input.filters;
-  const result = queryStoreData({ ...input, groupBy: input.groupBy ?? [], filters: filters ?? {}, dateField });
+function runReport(input: ReportInput, dateField: DateField = "order_date") {
+  const groupBy = input.groupBy ?? [];
+  // Day/week/month breakdowns always come back complete and in date order, so they draw as a line.
+  const timeSeries = groupBy.length > 0 && DIMENSIONS[groupBy[0]].timeGrain !== undefined;
+  const query = timeSeries
+    ? {
+        ...input,
+        metrics: [...new Set([...input.metrics, ...(input.sortBy ? [input.sortBy] : [])])],
+        sortBy: undefined,
+        sortDirection: undefined,
+        limit: undefined,
+      }
+    : input;
+  const result = queryStoreData({ ...query, groupBy, filters: input.filters ?? {}, dateField });
   return { ...result, chart: chartFor(result) };
 }
 
 /**
- * Returns: when only return counts/refunds are asked for, the period is the
- * return date ("returns last week"). When they're compared with sales
- * (return_rate, net_sales…), it's the order date, so both sides cover the same orders.
- * Grouping by return reason only makes sense for returned items.
+ * Returns always use the return date: "jackets returned last week" means
+ * items that came back last week, whenever they were ordered. (Return rates
+ * compare returns with sales of the same orders, so they live in salesReport.)
  */
 function runReturnsReport(input: z.output<typeof returnsInput>) {
-  const onlyReturnMetrics = input.metrics.every((metric) => (RETURN_ONLY_METRICS as readonly string[]).includes(metric));
-  const byReason = input.groupBy?.includes("return_reason") ?? false;
-  return runReport(input, onlyReturnMetrics ? "return_date" : "order_date", byReason);
+  return runReport(input, "return_date");
 }
 
 /**

@@ -63,7 +63,7 @@ describe("merchant tools", () => {
     });
   });
 
-  it("returnsReport counts returns by return date unless compared with sales", async () => {
+  it("returnsReport counts items by the date they came back; return rates live in salesReport", async () => {
     const byReturnDate = await createMerchantTools().returnsReport.execute!(
       { startDate: "2025-10-20", endDate: "2025-10-26", metrics: ["returns"], groupBy: ["product"], filters: { categories: ["Outerwear"] } },
       execOptions,
@@ -76,7 +76,20 @@ describe("merchant tools", () => {
       ],
     });
 
-    const withRate = await createMerchantTools().returnsReport.execute!(
+    // "jakets returnd last wk": the model may ask for extra metrics; the period must stay the return date.
+    const withRefunds = await createMerchantTools().returnsReport.execute!(
+      {
+        startDate: "2025-10-20",
+        endDate: "2025-10-26",
+        metrics: ["returns", "returned_units", "refunds"],
+        groupBy: ["product", "return_reason"],
+        filters: { categories: ["Outerwear"] },
+      },
+      execOptions,
+    );
+    expect(withRefunds).toMatchObject({ period: { dateField: "return_date" }, totals: { returns: 4, refunds: 792.15 } });
+
+    const withRate = await createMerchantTools().salesReport.execute!(
       { startDate: "2025-05-06", endDate: "2025-10-27", metrics: ["return_rate"], groupBy: ["category"], limit: 1 },
       execOptions,
     );
@@ -107,6 +120,25 @@ describe("merchant tools", () => {
         { month: "2025-10", repeat_order_share: 38.46, repeat_customers: 4 },
       ],
     });
+  });
+
+  it("keep day/week/month breakdowns complete and in date order, whatever sort the model asks for", async () => {
+    const result = await createMerchantTools().repeatCustomersReport.execute!(
+      {
+        startDate: "2025-05-06",
+        endDate: "2025-10-27",
+        metrics: ["repeat_orders"],
+        groupBy: ["month"],
+        sortBy: "repeat_order_share",
+        sortDirection: "desc",
+        limit: 2,
+      },
+      execOptions,
+    );
+    expect("rows" in result && result.rows.map((row) => row.month)).toEqual([
+      "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10",
+    ]);
+    expect("rows" in result && result.rows[5]).toEqual({ month: "2025-10", repeat_orders: 5, repeat_order_share: 38.46 });
   });
 
   it("only allow each tool's own metrics", async () => {

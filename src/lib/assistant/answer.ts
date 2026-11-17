@@ -47,6 +47,8 @@ export async function streamMerchantAnswer({
     tools,
     prepareStep: ({ stepNumber }) => (stepNumber === 0 ? { toolChoice: "required" } : { toolChoice: "none" }),
     stopWhen: stepCountIs(2),
+    // Free models sometimes time out mid-response; rerun just that step.
+    streamRetries: 2,
     temperature: 0,
   });
 }

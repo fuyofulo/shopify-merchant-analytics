@@ -4,11 +4,15 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
  * Free OpenRouter models that support tool calling, tried in this order.
  * OpenRouter falls through to the next one when a model is rate-limited or down,
  * which happens often on the free tier.
+ *
+ * Chosen by running questions from the merchant requests against each free
+ * tool-calling model (Nov 2026). All three picked the right tool with exact
+ * dates and reported correct numbers. Ernie was fastest (~4s per answer).
  */
 export const DEFAULT_FREE_MODELS = [
-  "google/gemma-4-31b-it:free",
+  "baidu/ernie-5.5-flash-preview:free",
+  "inclusionai/ling-3.2-flash:free",
   "nvidia/nemotron-3-ultra-550b-a55b:free",
-  "google/gemma-4-26b-a4b-it:free",
 ];
 
 export class MissingApiKeyError extends Error {

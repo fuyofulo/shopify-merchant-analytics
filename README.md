@@ -11,15 +11,16 @@ POST /api/chat  { "question": "jakets returnd last wk" }
 Step 1: free OpenRouter model (Vercel AI SDK, toolChoice "required")
    │  picks one tool, copies exact dates from the date table in its instructions
    │  returnsReport({ startDate: "2025-10-20", endDate: "2025-10-26",
-   │                  metrics: ["returns", "refunds"], groupBy: ["product"],
+   │                  metrics: ["returned_units", "refunds"], groupBy: ["product"],
    │                  filters: { categories: ["Outerwear"] } })
    ▼
 Query engine (this repo)  ──reads──▶  data/orders.csv
-   │  { rows: [{ product: "Alpine Down Parka", returns: 3, … }], totals: {…},
-   │    chart: { type: "bar", title: "Returns, Refunds by product", … }, warnings: [] }
+   │  { rows: [{ product: "Alpine Down Parka", returned_units: 3, refunds: 657 }, { product: "Northridge Insulated Jacket", … }],
+   │    totals: { returned_units: 4, refunds: 792.15 }, chart: { type: "bar", title: "Returned units, Refunds by product", … } }
    ▼
 Step 2: same model, no tools allowed (toolChoice "none")
-   │  "4 jackets came back last week: 3 Alpine Down Parkas and 1 Northridge Insulated Jacket, $792.15 refunded."
+   │  "Last week (Oct 20–26), 4 jacket units were returned, totaling $792.15 in refunds. The Alpine Down
+   │   Parka accounted for 3 of those returns ($657.00), with 1 Northridge Insulated Jacket returned ($135.15)."
    ▼
 Streamed to the client: tool call → tool result (rows + chart spec) → answer text
 ```
@@ -34,7 +35,8 @@ Streamed to the client: tool call → tool result (rows + chart spec) → answer
 | Streaming chat route `POST /api/chat`: free OpenRouter model, one tool call, exact dates | ✅ Done |
 | Chart spec in every tool result (`stat` / `line` / `bar`) | ✅ Done |
 | Data API (`/api/analytics/query`, `/api/analytics/dataset`) | ✅ Done |
-| Tests (30, no API key needed; numbers checked against values computed separately) | ✅ Done |
+| Tests (31, no API key needed; numbers checked against values computed separately) | ✅ Done |
+| Live-tested on a free model with real merchant questions (see below) | ✅ Done |
 | Chat UI that renders the charts | ⏭ Next step |
 
 ## Quick start
@@ -78,8 +80,25 @@ How it guarantees **one tool call with exact dates**:
 - **Exactly one tool call.** Step 1 runs with `toolChoice: "required"`, so the model must call a tool. Step 2 runs with `toolChoice: "none"`, so it can only write the answer. `stopWhen: stepCountIs(2)` ends the run there. The provider is asked for `parallel_tool_calls: false`. As a final guard, the tools for each request share a flag, so only the first call runs and any extra call gets an error back.
 - **Exact dates.** Free models are unreliable at date arithmetic, so the code works the dates out itself ([`periods.ts`](src/lib/analytics/periods.ts)). It turns the time phrases merchants actually used into exact dates and puts that table in the system prompt. Every tool requires `startDate` and `endDate` as `YYYY-MM-DD`, validated by Zod. The model copies dates; it doesn't calculate them.
 - **Answers only from the result.** Temperature is 0. The instructions say to use only numbers from the tool result and to pass on its warnings (dates with no data, products the store doesn't sell).
+- **Charts that draw correctly.** Day, week and month breakdowns always come back complete and in date order, even if the model asks to sort them, so they draw as a line.
 
-If the free model is rate-limited, the stream ends with a readable message ("The free AI model is busy right now…") rather than a stack trace.
+Free models sometimes time out partway through a response. `streamRetries: 2` reruns just that step. If the model is still unavailable, the stream ends with a readable message ("The free AI model is busy right now…") rather than a stack trace.
+
+### Live results (free model, real questions from the spreadsheet)
+
+These come from `POST /api/chat` with the default model, `baidu/ernie-5.5-flash-preview:free`. In every case the model made exactly one tool call, and every number was checked against the data.
+
+| Merchant question | Tool call the model made | Answer (abridged) |
+| --- | --- | --- |
+| jakets returnd last wk | `returnsReport` 2025-10-20 → 2025-10-26, returned units and refunds by product, category Outerwear | 4 jacket units returned, $792.15 refunded: Alpine Down Parka 3 ($657.00), Northridge Insulated Jacket 1 ($135.15). |
+| best seller since summer? | `salesReport` 2025-06-01 → 2025-10-27, net_sales by product | The Alpine Down Parka, $854.10, ahead of the Northridge Insulated Jacket at $596.25. |
+| sales by week last 8 weeks | `salesReport` 2025-09-01 → 2025-10-26, net_sales by week | $2,310.15 over 8 weeks. Peaked the week of Oct 13 at $635.40. No sales in the weeks of Sep 1 and Sep 15. Most recent week $543.50. |
+| top 10 products by revenue Oct 1 to Oct 15 | `salesReport` 2025-10-01 → 2025-10-15, net_sales by product, limit 10 | Alpine Down Parka $657.00, Northridge $294.15, Selvedge Jeans $212.40. Only 6 products sold that fortnight. |
+| Our sneaker returns feel really high recently… is it a sizing thing? | `returnsReport` 2025-09-28 → 2025-10-27, returns by product and reason | The store doesn't sell sneakers. Across all products, 6 returns ($994.94) in the last 30 days, led by the Alpine Down Parka. |
+| repeat customer share by month | `repeatCustomersReport` all data, repeat_order_share by month | 40% overall. By month 0%, 100%, 0%, 100%, 50%, then 38.46% in October (5 of 13). |
+| how many customers came back twice | `repeatCustomersReport` all data, repeat_customers | 7 customers came back and placed repeat orders. |
+| what was my ROAS on the fall jacket campaign? | `cannotAnswer` "ad spend and campaign performance" | Can't calculate ROAS without ad spend. Offers Outerwear sales instead. |
+| daily sales over Black Friday weekend last year compare to now? | `salesReport` 2024-11-29 → 2024-12-01, by day | No data before May 6, 2025. Offers a recent period instead. |
 
 ### Dates the model is given (today = Monday 2025-10-27)
 
@@ -116,20 +135,27 @@ Each report tool only accepts the metrics and breakdowns that fit its job, which
 
 | Tool | Metrics | Group by |
 | --- | --- | --- |
-| `salesReport` | net_sales, units_sold, orders, customers, average_order_value, sales_per_customer, gross_sales, discounts, discount_rate, net_revenue, units_per_order, refunds, returns | day, week, month, product, category, variant, size, color, sales_channel, customer_type, fulfillment_status |
-| `returnsReport` | returns, returned_units, refunds, customers_with_returns, return_rate, net_sales, units_sold, net_revenue | day, week, month, product, category, variant, size, color, return_reason, sales_channel, customer_type |
+| `salesReport` | net_sales, units_sold, orders, customers, average_order_value, sales_per_customer, gross_sales, discounts, discount_rate, net_revenue, units_per_order, returns, refunds, return_rate | day, week, month, product, category, variant, size, color, sales_channel, customer_type, fulfillment_status |
+| `returnsReport` | returns, returned_units, refunds, customers_with_returns | day, week, month, product, category, variant, size, color, return_reason, sales_channel, customer_type |
 | `repeatCustomersReport` | repeat_order_share, repeat_orders, repeat_customers, orders, customers, net_sales, units_sold, sales_per_customer, average_order_value | day, week, month, customer_type, product, category, sales_channel |
 
-`returnsReport` chooses which date the period applies to:
+**Each tool has one meaning of the period.** `returnsReport` counts items by the date they **came back**, so "jackets returned last week" means returned last week, whenever they were ordered. `salesReport` counts **orders placed** in the period. Return rates and "returns vs sales" therefore live in `salesReport`, which compares the same orders on both sides.
 
-- With return metrics only, the period is the **return date** ("returns last week" means returned last week).
-- With `return_rate` or a sales metric, the period is the **order date**, so returns are compared with the sales they came from.
+An early version switched the returns tool to order dates when the model added `return_rate`. The free model did add it, and "jakets returnd last wk" came back as zero. Giving each tool a single meaning fixed it.
 
 ### Model: free OpenRouter models only
 
-The default list in [`model.ts`](src/lib/assistant/model.ts) holds free (`:free`) models that support tool calling and `tool_choice`. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first model is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`.
+The job is simple: pick one of four tools and copy dates from a table. So a fast free model works, and nothing here needs a paid model. To choose one, I ran the same two spreadsheet questions ("best seller since summer?" and the sneaker-returns/sizing question) through every free OpenRouter model that supports tool calling and `tool_choice`:
 
-The job is simple: pick one of four tools and copy dates from a table. So a small free model works, and nothing here needs a paid model. OpenRouter rate-limits free models per minute and per day, and each question uses two model requests.
+| Free model | Right tool + exact dates | Notes | Time per answer |
+| --- | --- | --- | --- |
+| `baidu/ernie-5.5-flash-preview:free` | 2 / 2 | Correct numbers. Said the store doesn't sell sneakers. Used return reasons to answer the sizing question. | ~4s |
+| `inclusionai/ling-3.2-flash:free` | 2 / 2 | Correct numbers. Broke returns down by size. | 6–19s |
+| `nvidia/nemotron-3-ultra-550b-a55b:free` | 2 / 2 | Correct numbers. | 11–22s |
+| `nvidia/nemotron-3.5-lightning:free` | 1 / 2 | Gave up on the sneaker question (`cannotAnswer`). | 3–7s |
+| `google/gemma-4-31b-it:free` | 0 / 2 | No output (timed out). | — |
+
+The default in [`model.ts`](src/lib/assistant/model.ts) is the top three, in that order. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`. OpenRouter rate-limits free models per minute and per day, and each question uses two model requests.
 
 ## The query engine: `queryStoreData`
 
@@ -214,6 +240,7 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 | How many customers have returned products, and why? | 8 customers returned 8 items, with $1,116.94 refunded. Reasons: Too small (2), Too large (2), Changed mind (2), Defective (1), Not as pictured (1). |
 | What are our top-selling products? | Alpine Down Parka $854.10, Northridge Insulated Jacket $596.25, Selvedge Slim Jeans $436.60, … |
 | Which jackets came back as returns last week? | 4: Alpine Down Parka ×3, Northridge Insulated Jacket ×1. $792.15 refunded. |
+| Returns in the last 30 days? | 6 returns, $994.94 refunded: Alpine Down Parka 3, Northridge Insulated Jacket 2, Utility Chino 1. |
 | Are repeat customers growing? | 40% of all orders are repeat orders. By month: Sep 50%, Oct 38.46% (5 of 13). |
 | Which sales channel is used the most? | Online Store: 11 of 20 orders, $1,882.20. |
 | How many sales did we do last week / last month? | 4 orders, $543.50 / 2 orders, $231.10. |
