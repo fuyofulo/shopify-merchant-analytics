@@ -15,9 +15,9 @@ export default function Home() {
       <p className="text-sm font-medium text-neutral-500">Zero Uni · Project 1</p>
       <h1 className="mt-1 text-3xl font-semibold tracking-tight">Shopify Merchant Analytics</h1>
       <p className="mt-3 max-w-2xl text-neutral-600 dark:text-neutral-400">
-        Ask questions about your store in plain English. An LLM turns each question into a call to{" "}
-        <code className="font-mono text-sm">queryStoreData</code> — a date range, the metrics needed, and how to break
-        them down — and answers from the result. The query engine is in place; the chat interface comes next.
+        Ask questions about your store in plain English. A free LLM picks one report tool (sales, returns or repeat
+        customers), fills in exact dates, and answers from the result. The streaming chat route is live at{" "}
+        <code className="font-mono text-sm">POST /api/chat</code>; the chat interface with charts comes next.
       </p>
 
       <section className="mt-10">
@@ -55,6 +55,9 @@ export default function Home() {
       <section className="mt-10">
         <h2 className="text-lg font-semibold">API</h2>
         <ul className="mt-2 list-inside list-disc text-sm text-neutral-600 dark:text-neutral-400">
+          <li>
+            <code className="font-mono">POST /api/chat</code> — ask a question, streams the tool call, result and answer
+          </li>
           <li>
             <code className="font-mono">POST /api/analytics/query</code> — run a query (JSON body)
           </li>

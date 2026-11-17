@@ -29,6 +29,9 @@ export const METRIC_KEYS = [
   "customers_with_returns",
   "return_rate",
   "discount_rate",
+  "repeat_orders",
+  "repeat_customers",
+  "repeat_order_share",
 ] as const;
 
 export type MetricKey = (typeof METRIC_KEYS)[number];
@@ -52,6 +55,7 @@ const orders = (items: readonly OrderLineItem[]) => countDistinct(items, (item) 
 const customers = (items: readonly OrderLineItem[]) => countDistinct(items, (item) => item.customerId);
 const unitsSold = (items: readonly OrderLineItem[]) => sum(items, (item) => item.quantity);
 const returnedItems = (items: readonly OrderLineItem[]) => items.filter((item) => item.returned);
+const repeatItems = (items: readonly OrderLineItem[]) => items.filter((item) => item.isRepeatCustomer);
 
 export const METRICS: Record<MetricKey, MetricDefinition> = {
   net_sales: {
@@ -160,6 +164,27 @@ export const METRICS: Record<MetricKey, MetricDefinition> = {
     compute: (items) => {
       const rate = ratio(discounts(items), grossSales(items));
       return rate === null ? null : rate * 100;
+    },
+  },
+  repeat_orders: {
+    label: "Repeat orders",
+    description: "Orders placed by customers who had ordered before (2nd order or later).",
+    format: "count",
+    compute: (items) => orders(repeatItems(items)),
+  },
+  repeat_customers: {
+    label: "Repeat customers",
+    description: "Distinct customers who came back and placed a repeat order.",
+    format: "count",
+    compute: (items) => customers(repeatItems(items)),
+  },
+  repeat_order_share: {
+    label: "Repeat order share",
+    description: "Repeat orders as a percentage (0–100) of all orders.",
+    format: "percent",
+    compute: (items) => {
+      const share = ratio(orders(repeatItems(items)), orders(items));
+      return share === null ? null : share * 100;
     },
   },
 };

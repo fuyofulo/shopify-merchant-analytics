@@ -1,20 +1,27 @@
 # Shopify Merchant Analytics
 
-**Zero Uni · Project 1.** A Next.js app where a Shopify merchant asks questions about their store in plain English (*"What are our top-selling products?"*, *"Why are customers returning things?"*) and gets answers and charts.
+**Zero Uni · Project 1.** A Next.js app where a Shopify merchant asks questions about their store in their own words (*"jakets returnd last wk"*, *"best seller since summer?"*, *"are repeat customers growing or not"*) and gets an answer, plus the data to draw a chart, streamed back.
 
-An LLM never reads the raw data or does arithmetic. It turns the question into a structured call to one function, **`queryStoreData`**: a date range, the metrics needed, and how to break them down. That function computes exact numbers from the order history and returns JSON that the LLM explains in words and the UI can draw as a chart.
+A free LLM on OpenRouter never reads the raw data and never does arithmetic. It picks **one** report tool, fills in **exact dates**, and then puts the tool's result into plain words. All numbers come from a deterministic query engine over the store's order history.
 
 ```
-Merchant question
-   │  "How many sales did we do last month?"
+POST /api/chat  { "question": "jakets returnd last wk" }
+   │
    ▼
-LLM (Vercel AI SDK, tool calling)
-   │  queryStoreData({ startDate: "2025-09-01", endDate: "2025-09-30", metrics: ["orders", "net_sales"] })
+Step 1: free OpenRouter model (Vercel AI SDK, toolChoice "required")
+   │  picks one tool, copies exact dates from the date table in its instructions
+   │  returnsReport({ startDate: "2025-10-20", endDate: "2025-10-26",
+   │                  metrics: ["returns", "refunds"], groupBy: ["product"],
+   │                  filters: { categories: ["Outerwear"] } })
    ▼
 Query engine (this repo)  ──reads──▶  data/orders.csv
-   │  { totals: { orders: 2, net_sales: 231.1 }, rows: [...], columns: [...], warnings: [] }
+   │  { rows: [{ product: "Alpine Down Parka", returns: 3, … }], totals: {…},
+   │    chart: { type: "bar", title: "Returns, Refunds by product", … }, warnings: [] }
    ▼
-LLM answer + chart  →  "You made 2 sales last month, totalling $231.10."
+Step 2: same model, no tools allowed (toolChoice "none")
+   │  "4 jackets came back last week: 3 Alpine Down Parkas and 1 Northridge Insulated Jacket, $792.15 refunded."
+   ▼
+Streamed to the client: tool call → tool result (rows + chart spec) → answer text
 ```
 
 ## Status
@@ -23,35 +30,121 @@ LLM answer + chart  →  "You made 2 sales last month, totalling $231.10."
 | --- | --- |
 | Data layer: CSV parsing, validation, typed line items | ✅ Done |
 | Query engine `queryStoreData`: metrics, breakdowns, filters, sorting, warnings | ✅ Done |
-| AI SDK tool definitions (`storeAnalyticsTools`) | ✅ Done |
-| API routes (`/api/analytics/query`, `/api/analytics/dataset`) | ✅ Done |
-| Tests (19, every number checked against values computed separately) | ✅ Done |
-| Chat UI + LLM route + chart rendering | ⏭ Next step |
+| Report tools described in merchants' own words (sales, returns, repeat customers) | ✅ Done |
+| Streaming chat route `POST /api/chat`: free OpenRouter model, one tool call, exact dates | ✅ Done |
+| Chart spec in every tool result (`stat` / `line` / `bar`) | ✅ Done |
+| Data API (`/api/analytics/query`, `/api/analytics/dataset`) | ✅ Done |
+| Tests (30, no API key needed; numbers checked against values computed separately) | ✅ Done |
+| Chat UI that renders the charts | ⏭ Next step |
 
 ## Quick start
 
+Requires Node.js 22+.
+
 ```bash
 npm install
-npm run dev        # http://localhost:3000
-npm test           # vitest
-npm run typecheck
-npm run lint
+cp .env.example .env.local      # then paste your OpenRouter key into it
+npm run dev                     # http://localhost:3000
 ```
 
-Node 20.9+ is required (developed on Node 24).
+```bash
+curl -N -X POST http://localhost:3000/api/chat \
+  -H 'content-type: application/json' \
+  -d '{"question":"jakets returnd last wk"}'
+```
 
-## The function: `queryStoreData`
+Other scripts: `npm test` (vitest), `npm run typecheck`, `npm run lint`, `npm run build`.
+
+### Environment (`.env.local`)
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `OPENROUTER_API_KEY` | yes | Free key from [openrouter.ai/keys](https://openrouter.ai/keys). |
+| `OPENROUTER_MODEL` | no | One model ID, or a comma-separated list tried in order. Defaults to the free models below. |
+| `STORE_TODAY` | no | The date treated as "today" (`YYYY-MM-DD`). Defaults to the last day of data, `2025-10-27`. |
+
+## The chat route: `POST /api/chat`
+
+**Request:** `{ "question": "..." }` for a single question, or `{ "messages": UIMessage[] }`, which is what the AI SDK's `useChat()` sends.
+
+**Response:** an [AI SDK UI message stream](https://ai-sdk.dev/docs/ai-sdk-ui/stream-protocol) (server-sent events), which `useChat()` reads directly. It carries:
+
+1. the tool call, with the exact dates and query the model chose,
+2. the tool result: `rows`, `totals`, `columns`, `warnings` and a `chart` spec,
+3. the model's answer, streamed as text.
+
+How it guarantees **one tool call with exact dates**:
+
+- **Exactly one tool call.** Step 1 runs with `toolChoice: "required"`, so the model must call a tool. Step 2 runs with `toolChoice: "none"`, so it can only write the answer. `stopWhen: stepCountIs(2)` ends the run there. The provider is asked for `parallel_tool_calls: false`. As a final guard, the tools for each request share a flag, so only the first call runs and any extra call gets an error back.
+- **Exact dates.** Free models are unreliable at date arithmetic, so the code works the dates out itself ([`periods.ts`](src/lib/analytics/periods.ts)). It turns the time phrases merchants actually used into exact dates and puts that table in the system prompt. Every tool requires `startDate` and `endDate` as `YYYY-MM-DD`, validated by Zod. The model copies dates; it doesn't calculate them.
+- **Answers only from the result.** Temperature is 0. The instructions say to use only numbers from the tool result and to pass on its warnings (dates with no data, products the store doesn't sell).
+
+If the free model is rate-limited, the stream ends with a readable message ("The free AI model is busy right now…") rather than a stack trace.
+
+### Dates the model is given (today = Monday 2025-10-27)
+
+The order data is historical. It ends on 2025-10-27, the same day the merchant report requests were sent, so that is "today" by default.
+
+| Merchant says | Dates |
+| --- | --- |
+| "last week", "last wk", "through last Sunday" | 2025-10-20 → 2025-10-26 |
+| "this week" | 2025-10-27 → 2025-10-27 |
+| "last 7 days" | 2025-10-21 → 2025-10-27 |
+| "last 14 days", "last couple of weeks" | 2025-10-14 → 2025-10-27 |
+| "last 30 days", "lately", "recently" | 2025-09-28 → 2025-10-27 |
+| "last 8 weeks" (full Mon–Sun weeks) | 2025-09-01 → 2025-10-26 |
+| "this month" | 2025-10-01 → 2025-10-27 |
+| "last month" | 2025-09-01 → 2025-09-30 |
+| "this season" (fall) | 2025-09-01 → 2025-10-27 |
+| "since summer" | 2025-06-01 → 2025-10-27 |
+| no period mentioned | 2025-05-06 → 2025-10-27 (all data) |
+
+## The tools, in merchants' words
+
+Each tool's description starts with a plain sentence built from phrases in the **Merchant Question** column of [`data/merchant-report-requests-2025-10-27.xlsx`](data/merchant-report-requests-2025-10-27.xlsx) (30 real requests). After it come some of the requests themselves, quoted as written, typos included. The model picks a tool by matching the merchant's words to these descriptions ([`tools.ts`](src/lib/assistant/tools.ts)).
+
+| Tool | Description (first sentence) | Example requests from the file |
+| --- | --- | --- |
+| `salesReport` | See your sales and revenue for any stretch of time (per day, by week, last month or since summer) and which products are your best sellers by revenue or by units sold, so you know what sold best before BFCM. | "best seller since summer?", "sales by week last 8 weeks", "top 10 products by revenue Oct 1 to Oct 15", "revenue last month" |
+| `returnsReport` | See how your returns are doing: which products or categories got returned the most, how much you refunded, and why they came back, so you can tell if it's a sizing thing before you reorder. | "jakets returnd last wk", "most returned category", "which styles are coming back the most? Is it a sizing thing?" |
+| `repeatCustomersReport` | See how many customers came back to order a 2nd time and what share of your orders come from repeat customers each month, so you know whether repeat customers are growing or not. | "are repeat customers growing or not", "repeat customer share by month", "how many customers came back twice" |
+| `cannotAnswer` | The store's order data can't answer this question (ad spend, ROAS, traffic, stock, costs). | "what was my ROAS on the fall jacket campaign?", "how much did we spend on instagram ads" |
+
+Merchants use *came back* and *returning* in two senses: products coming back as returns, and customers coming back to order again. The descriptions spell out which sense belongs to which tool.
+
+Each report tool only accepts the metrics and breakdowns that fit its job, which keeps the schema small enough for a free model:
+
+| Tool | Metrics | Group by |
+| --- | --- | --- |
+| `salesReport` | net_sales, units_sold, orders, customers, average_order_value, sales_per_customer, gross_sales, discounts, discount_rate, net_revenue, units_per_order, refunds, returns | day, week, month, product, category, variant, size, color, sales_channel, customer_type, fulfillment_status |
+| `returnsReport` | returns, returned_units, refunds, customers_with_returns, return_rate, net_sales, units_sold, net_revenue | day, week, month, product, category, variant, size, color, return_reason, sales_channel, customer_type |
+| `repeatCustomersReport` | repeat_order_share, repeat_orders, repeat_customers, orders, customers, net_sales, units_sold, sales_per_customer, average_order_value | day, week, month, customer_type, product, category, sales_channel |
+
+`returnsReport` chooses which date the period applies to:
+
+- With return metrics only, the period is the **return date** ("returns last week" means returned last week).
+- With `return_rate` or a sales metric, the period is the **order date**, so returns are compared with the sales they came from.
+
+### Model: free OpenRouter models only
+
+The default list in [`model.ts`](src/lib/assistant/model.ts) holds free (`:free`) models that support tool calling and `tool_choice`. They are sent as an [OpenRouter fallback list](https://openrouter.ai/docs/features/model-routing), so if the first model is rate-limited or down, OpenRouter tries the next. You can override the list with `OPENROUTER_MODEL`.
+
+The job is simple: pick one of four tools and copy dates from a table. So a small free model works, and nothing here needs a paid model. OpenRouter rate-limits free models per minute and per day, and each question uses two model requests.
+
+## The query engine: `queryStoreData`
+
+All three report tools are thin wrappers around one function:
 
 ```ts
 import { queryStoreData } from "@/lib/analytics";
 
 const result = queryStoreData({
-  startDate: "2025-05-06",         // inclusive, YYYY-MM-DD
-  endDate: "2025-10-27",           // inclusive, YYYY-MM-DD
+  startDate: "2025-05-06",               // inclusive, YYYY-MM-DD
+  endDate: "2025-10-27",                 // inclusive, YYYY-MM-DD
   metrics: ["net_sales", "units_sold"],
-  groupBy: ["product"],            // optional, up to 2 dimensions
-  filters: { customerType: "repeat" }, // optional
-  limit: 5,                        // optional, "top 5"
+  groupBy: ["product"],                  // optional, up to 2 dimensions
+  filters: { customerType: "repeat" },   // optional
+  limit: 5,                              // optional, "top 5"
 });
 ```
 
@@ -61,13 +154,11 @@ const result = queryStoreData({
 | --- | --- | --- |
 | `startDate`, `endDate` | yes | The period, inclusive (`YYYY-MM-DD`). |
 | `metrics` | yes | What to measure (see below). The first metric is the default sort key. |
-| `groupBy` | no | Up to two dimensions to break results down by, e.g. `["product"]` or `["month", "sales_channel"]`. If empty, you get one overall row. |
+| `groupBy` | no | Up to two dimensions, e.g. `["product"]` or `["month", "sales_channel"]`. If empty, you get one overall row. |
 | `filters` | no | `products`, `categories`, `salesChannels`, `customerType` (`new`/`repeat`), `customerIds`, `orderIds`, `sizes`, `colors`, `fulfillmentStatuses`, `returned`, `returnReasons`. Text matching ignores case. Values within one list are OR-ed, and different filters are AND-ed. `products` accepts an ID or part of a title (`"parka"`). |
-| `dateField` | no | `order_date` (default) or `return_date`. Use `return_date` for "returns that *happened* in this period". |
+| `dateField` | no | `order_date` (default) or `return_date`. |
 | `sortBy`, `sortDirection` | no | Rank rows by any metric (`desc` by default). Time breakdowns default to chronological order. |
-| `limit` | no | Maximum rows, e.g. `5` for "top 5". `totals` still cover everything. |
-
-Input is validated with a Zod schema (`storeQuerySchema`). The same schema is the tool's input schema, so the LLM sees the allowed values and descriptions.
+| `limit` | no | Maximum rows. `totals` still cover everything. |
 
 ### Metrics
 
@@ -75,25 +166,21 @@ Input is validated with a Zod schema (`storeQuerySchema`). The same schema is th
 | --- | --- |
 | `net_sales` | Sales after discounts, before refunds (sum of line totals). Default meaning of "sales" or "revenue". |
 | `gross_sales` | Sales before discounts (quantity × unit price). |
-| `discounts` | Total discounts given. |
+| `discounts` / `discount_rate` | Discounts given, and as a % of gross sales. |
 | `refunds` | Total refunded on returned items. |
 | `net_revenue` | Net sales − refunds. |
-| `orders` | Distinct orders. |
-| `line_items` | Order lines. |
-| `units_sold` | Total quantity sold. |
-| `customers` | Distinct customers. |
+| `orders` / `line_items` / `units_sold` / `customers` | Distinct orders, order lines, quantity sold, distinct customers. |
 | `average_order_value` | Net sales ÷ orders. |
 | `sales_per_customer` | Net sales ÷ customers. |
 | `units_per_order` | Units ÷ orders. |
-| `returns` | Returned line items. |
-| `returned_units` | Returned quantity. |
+| `returns` / `returned_units` | Returned line items / quantity. |
 | `customers_with_returns` | Distinct customers who returned something. |
 | `return_rate` | Returned units as a % (0–100) of units sold. |
-| `discount_rate` | Discounts as a % (0–100) of gross sales. |
+| `repeat_orders` | Orders from customers who had ordered before. |
+| `repeat_customers` | Distinct customers who placed a repeat order. |
+| `repeat_order_share` | Repeat orders as a % (0–100) of all orders. |
 
-### Dimensions (`groupBy`)
-
-`day`, `week` (Monday start, labelled by the Monday's date), `month`, `product`, `category`, `variant`, `size`, `color`, `sales_channel`, `customer_type` (`new` / `repeat`), `customer`, `fulfillment_status`, `return_reason`, `order`.
+Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `variant`, `size`, `color`, `sales_channel`, `customer_type` (`new` / `repeat`), `customer`, `fulfillment_status`, `return_reason`, `order`.
 
 ### Output
 
@@ -109,118 +196,90 @@ Input is validated with a Zod schema (`storeQuerySchema`). The same schema is th
   "matchedLineItems": 28,
   "totalRows": 11,
   "truncated": true,
-  "warnings": []                          // e.g. unknown filter values, period outside the data
+  "warnings": [],                         // e.g. unknown filter values, period outside the data
+  "chart":   { "type": "bar", "title": "Net sales by product", "x": {…}, "seriesBy": null, "metrics": [ … ] }
 }
 ```
 
-- `columns` describes each field in `rows`, so a chart component can choose its axes and number formats without guessing.
-- A single time breakdown (`day`/`week`/`month`) includes empty buckets as zeros, so trend charts don't skip periods. Ratios that can't be computed (such as average order value in a week with no orders) are `null`, not `0`.
-- `warnings` let the LLM correct itself. If it filters on a channel that doesn't exist, the warning lists the channels that do. If it asks about a period with no data, the warning gives the range that has data.
+(`chart` is added by the chat tools.)
 
-### `describeDataset()`
+- **Charts.** `columns` and `chart` tell a UI how to draw the result without guessing. A time breakdown becomes a `line` chart, a category breakdown a `bar` chart, and no breakdown a `stat` tile. With two dimensions, `seriesBy` splits the result into one series per value.
+- **Empty periods.** A single time breakdown includes empty buckets as zeros, so trend charts don't skip periods. Ratios that can't be computed are `null`, not `0`.
+- **Warnings.** They tell the model what to pass on to the merchant. If a filter names a channel the store doesn't have, the warning lists the ones that exist. If the dates fall outside the data, it gives the range that has data.
 
-Returns what the data contains: date coverage (`latestDataDate`), counts, products, categories, channels, return reasons, sizes and colours, plus every metric and dimension with its description. Put it in the system prompt or expose it as a tool so the LLM uses real values.
+## Example answers from the data
 
-## Example questions
-
-These are in [`src/lib/analytics/examples.ts`](src/lib/analytics/examples.ts) and run as tests. The dataset ends on Monday **2025-10-27**, so relative periods are resolved from that date.
-
-| Question | Query | Answer from the data |
-| --- | --- | --- |
-| How many customers have returned products, and why? | `metrics: [customers_with_returns, returns, refunds]`, `groupBy: [return_reason]`, `filters: { returned: true }` | 8 customers returned 8 items, with $1,116.94 refunded. Reasons: Too small (2, $354.15), Too large (2, $247.00), Changed mind (2, $202.79), Defective (1), Not as pictured (1). |
-| What are our top-selling products? | `metrics: [net_sales, units_sold, orders]`, `groupBy: [product]`, `limit: 5` | Alpine Down Parka $854.10, Northridge Insulated Jacket $596.25, Selvedge Slim Jeans $436.60, … |
-| What are repeat customers buying on repeat purchases? | `metrics: [units_sold, net_sales, customers]`, `groupBy: [product]`, `filters: { customerType: repeat }` | Northridge Insulated Jacket (3 units), Selvedge Slim Jeans (3), Wool Beanie (3), … |
-| What is the average sale per customer? | `metrics: [sales_per_customer, average_order_value, customers, orders]` | $172.13 per customer across 18 customers. Average order value is $154.92 across 20 orders. |
-| Which sales channel is used the most? | `metrics: [orders, net_sales, customers]`, `groupBy: [sales_channel]` | Online Store: 11 of 20 orders, $1,882.20 |
-| How many sales did we do last week? | `2025-10-20 → 2025-10-26`, `metrics: [orders, net_sales, units_sold]` | 4 orders, $543.50, 7 units |
-| How many sales did we do last month? | `2025-09-01 → 2025-09-30`, same metrics | 2 orders, $231.10 |
-| How have sales trended month over month? | `metrics: [net_sales, orders]`, `groupBy: [month]` | May $224 → … → October $2,261.25 (13 orders) |
-
-## Using it with the Vercel AI SDK
-
-The tools are ready to pass to `streamText` / `generateText`:
-
-```ts
-import { stepCountIs, streamText } from "ai";
-import { describeDataset, storeAnalyticsTools } from "@/lib/analytics";
-
-const result = streamText({
-  model, // any AI SDK model, e.g. through the Vercel AI Gateway
-  system: `You are an analytics assistant for a Shopify merchant.
-Today's date is ${describeDataset().latestDataDate}. Answer only from tool results.`,
-  messages,
-  tools: storeAnalyticsTools, // { describeStoreData, queryStoreData }
-  stopWhen: stepCountIs(5),
-});
-```
-
-The tool description in [`tool.ts`](src/lib/analytics/tool.ts) tells the model how to map common wording to queries: "sales" means `net_sales`, "why returned" means filtering on returns and grouping by `return_reason`, how to resolve relative dates, and so on.
+| Question | Answer |
+| --- | --- |
+| How many customers have returned products, and why? | 8 customers returned 8 items, with $1,116.94 refunded. Reasons: Too small (2), Too large (2), Changed mind (2), Defective (1), Not as pictured (1). |
+| What are our top-selling products? | Alpine Down Parka $854.10, Northridge Insulated Jacket $596.25, Selvedge Slim Jeans $436.60, … |
+| Which jackets came back as returns last week? | 4: Alpine Down Parka ×3, Northridge Insulated Jacket ×1. $792.15 refunded. |
+| Are repeat customers growing? | 40% of all orders are repeat orders. By month: Sep 50%, Oct 38.46% (5 of 13). |
+| Which sales channel is used the most? | Online Store: 11 of 20 orders, $1,882.20. |
+| How many sales did we do last week / last month? | 4 orders, $543.50 / 2 orders, $231.10. |
 
 ## HTTP API
 
-```bash
-# Run a query
-curl -X POST http://localhost:3000/api/analytics/query \
-  -H 'content-type: application/json' \
-  -d '{"startDate":"2025-05-06","endDate":"2025-10-27","metrics":["orders","net_sales"],"groupBy":["sales_channel"]}'
-
-# What the dataset contains, and which metrics/dimensions exist
-curl http://localhost:3000/api/analytics/dataset
-```
-
-An invalid query returns `400` with the Zod field errors.
+| Endpoint | Purpose |
+| --- | --- |
+| `POST /api/chat` | Ask a question. Streams the tool call, result and answer. |
+| `POST /api/analytics/query` | Run `queryStoreData` directly with a JSON body. An invalid query returns `400` with field errors. |
+| `GET /api/analytics/dataset` | What the data contains: date coverage, products, channels, return reasons, metrics, dimensions. |
 
 ## Project structure
 
 ```
 .
 ├── data/
-│   └── orders.csv                 # Store order history, May–Oct 2025 (one row per line item)
+│   ├── orders.csv                              # Store order history, May–Oct 2025 (one row per line item)
+│   └── merchant-report-requests-2025-10-27.xlsx # 30 real merchant questions; source of the tool wording
 ├── src/
 │   ├── app/
-│   │   ├── page.tsx               # Overview: dataset summary + example queries
-│   │   ├── layout.tsx
-│   │   └── api/analytics/
-│   │       ├── query/route.ts     # POST: run queryStoreData
-│   │       └── dataset/route.ts   # GET: describeDataset
+│   │   ├── page.tsx                  # Overview: dataset summary + example queries
+│   │   └── api/
+│   │       ├── chat/route.ts         # POST: streaming chat (OpenRouter + AI SDK)
+│   │       └── analytics/
+│   │           ├── query/route.ts    # POST: run queryStoreData
+│   │           └── dataset/route.ts  # GET: describeDataset
 │   └── lib/
-│       ├── store-data/            # Loading the raw data
-│       │   ├── csv.ts             # RFC 4180 CSV parser
-│       │   ├── parse.ts           # CSV rows → validated OrderLineItem[]
-│       │   ├── load.ts            # Reads data/orders.csv (cached per process)
-│       │   └── types.ts           # OrderLineItem
-│       └── analytics/             # The query engine
-│           ├── query.ts           # queryStoreData(): filter → group → compute → sort → limit
-│           ├── schema.ts          # Zod input schema (shared by the API and the LLM tool)
-│           ├── metrics.ts         # Metric definitions
-│           ├── dimensions.ts      # groupBy dimensions
-│           ├── filters.ts         # Filters + "unknown value" warnings
-│           ├── dates.ts           # Day/week/month bucketing
-│           ├── describe.ts        # describeDataset()
-│           ├── examples.ts        # Merchant questions → queries
-│           ├── tool.ts            # AI SDK tool definitions
-│           └── index.ts           # Public exports
+│       ├── assistant/                # The LLM side
+│       │   ├── tools.ts              # salesReport, returnsReport, repeatCustomersReport, cannotAnswer
+│       │   ├── instructions.ts       # System prompt: today, date table, catalogue, one-call rule
+│       │   ├── answer.ts             # streamMerchantAnswer(): step 1 tool call, step 2 answer
+│       │   └── model.ts              # OpenRouter free model(s) from env
+│       ├── analytics/                # The query engine (no LLM)
+│       │   ├── query.ts              # queryStoreData(): filter → group → compute → sort → limit
+│       │   ├── schema.ts             # Zod input schema
+│       │   ├── metrics.ts            # Metric definitions
+│       │   ├── dimensions.ts         # groupBy dimensions
+│       │   ├── filters.ts            # Filters + "unknown value" warnings
+│       │   ├── periods.ts            # Merchant time phrases → exact dates
+│       │   ├── dates.ts              # Day/week/month bucketing
+│       │   ├── chart.ts              # Chart spec from a result
+│       │   ├── describe.ts           # describeDataset()
+│       │   └── examples.ts           # Example questions → queries
+│       └── store-data/               # Loading the raw CSV
+│           ├── csv.ts, parse.ts, load.ts, types.ts
 └── tests/
-    └── analytics.test.ts
+    ├── analytics.test.ts             # Query engine
+    └── assistant.test.ts             # Dates, tools, and the two-step chat flow (mock model)
 ```
 
-To add a metric, add an entry to `METRICS` in `metrics.ts`. To add a dimension, add one to `DIMENSIONS` in `dimensions.ts`. The schema, the tool, the API and `describeDataset()` all pick it up from those registries.
+To add a metric, add an entry to `METRICS` in `metrics.ts`. To add a dimension, add one to `DIMENSIONS` in `dimensions.ts`. To make either available to the model, also add it to the list for the right tool in `tools.ts`.
 
 ## The data
 
-`data/orders.csv` is the store's order export for May–October 2025: 28 line items across 20 orders, 18 customers and 11 products. Columns:
-
-`order_id, line_item_id, order_date, customer_id, is_repeat_customer, product_id, product_title, product_category, variant, quantity, unit_price, discount_amount, line_total, sales_channel, fulfillment_status, returned, return_date, return_reason, refund_amount`
-
-How the columns are interpreted:
+`data/orders.csv` is the store's order export for May–October 2025: 28 line items across 20 orders, 18 customers and 11 products.
 
 - **Grain:** one row per order line item. Orders and customers are counted as distinct IDs, never as rows.
-- **`is_repeat_customer`** describes the order: `true` means the customer had ordered before, so this order is a repeat purchase.
+- **`is_repeat_customer`** describes the order: `true` means the customer had ordered before, so this is a repeat purchase.
 - **`line_total`** = `quantity × unit_price − discount_amount`, and that is what "net sales" sums.
 - **Refunds can be partial**: e.g. one $143.10 line was refunded $128.79.
 - **`variant`** (`"M / Black"`) is split into `size` and `color`.
 - Money is summed in integer cents, so totals are exact.
 
+Some merchant questions ask about things this store doesn't have: sneakers, bags, last year's Black Friday, ad spend. The assistant says so instead of guessing.
+
 ## Tech
 
-Next.js 16 (App Router, TypeScript), Zod 4, Vercel AI SDK 7, Tailwind CSS 4, Vitest.
+Next.js 16 (App Router, TypeScript), Vercel AI SDK 7, OpenRouter (`@openrouter/ai-sdk-provider`), Zod 4, Tailwind CSS 4, Vitest.
