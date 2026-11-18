@@ -199,7 +199,7 @@ def badge(slide, x, y, d, icon_name, icon_color, fill, ring=None):
     return circle
 
 
-def pin(slide, x, y, number, size=0.36, font_size=13, fill=GREEN, ring=None):
+def pin(slide, x, y, number, size=0.36, font_size=13, fill=GREEN, ring=None, color=CARD):
     dot = shape(slide, MSO_SHAPE.OVAL, x, y, size, size, fill=fill, line=ring, line_width=1.75, name=f"Pin {number}")
     frame = dot.text_frame
     frame.margin_left = frame.margin_right = frame.margin_top = frame.margin_bottom = 0
@@ -208,7 +208,7 @@ def pin(slide, x, y, number, size=0.36, font_size=13, fill=GREEN, ring=None):
     p.alignment = PP_ALIGN.CENTER
     run = p.add_run()
     run.text = str(number)
-    style(run, font_size, CARD, bold=True)
+    style(run, font_size, color, bold=True)
     return dot
 
 
@@ -311,7 +311,7 @@ def quiet_chart_frame(chart):
 def slide_problem(prs):
     slide = new_slide(
         prs,
-        "This is a real question a merchant typed on October 27, spelling and all. Merchants ask in their own "
+        "This is a real question a merchant sent us on October 27. Merchants ask in their own "
         "words, by email, support chat, the admin search box and the Community forum. On the right are a few more "
         "from the same day. Someone has to turn each one into a report by hand, and several merchants needed the "
         "answer before placing their Black Friday reorder. So I built a chat dashboard: they type the question "
@@ -320,9 +320,9 @@ def slide_problem(prs):
     split = 7.45
     panel(slide, 0, w=split, name="Green half")
     kicker(slide, "Shopify Merchant Analytics", y=0.8, color=LIME)
-    title(slide, "“jakets returnd\nlast wk”", y=1.4, size=64, color=ON_DEEP, h=2.2, w=6.5)
-    text(slide, LEFT, 3.72, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
-    text(slide, LEFT, 4.3, 6.1, 1.3,
+    title(slide, "“Which jackets came\nback as returns\nlast week?”", y=1.35, size=48, color=ON_DEEP, h=2.3, w=6.6)
+    text(slide, LEFT, 3.8, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
+    text(slide, LEFT, 4.38, 6.1, 1.3,
          "Merchants ask in their own words. Before Black Friday they need the answer in seconds, not a report "
          "request.", size=20, color=ON_DEEP_2, line_spacing=1.1)
     text(slide, LEFT, 5.95, 6.4, 0.8,
@@ -415,125 +415,133 @@ def slide_interface(prs):
 # 3. How a question becomes a chart
 
 
-def mini_bar_chart(slide, x, y, w, h):
-    data = CategoryChartData()
-    data.categories = ["Alpine Down Parka", "Northridge Insulated"]
-    data.add_series("Returned units", [3, 1])
-    frame = slide.shapes.add_chart(XL_CHART_TYPE.BAR_CLUSTERED, Inches(x), Inches(y), Inches(w), Inches(h), data)
-    frame.name = "Chart: returned units by product"
-    chart = frame.chart
-    quiet_chart_frame(chart)
-    chart.has_legend = False
-    chart.has_title = False
-    chart.font.name = FONT
-    chart.font.size = Pt(10)
-    chart.font.color.rgb = INK_2
-    plot = chart.plots[0]
-    plot.gap_width = 45
-    plot.vary_by_categories = False
-    plot.has_data_labels = True
-    plot.data_labels.position = XL_LABEL_POSITION.OUTSIDE_END
-    plot.data_labels.font.size = Pt(11)
-    plot.data_labels.font.bold = True
-    plot.data_labels.font.color.rgb = INK
-    series = plot.series[0]
-    series.format.fill.solid()
-    series.format.fill.fore_color.rgb = GREEN
-    values = chart.value_axis
-    values.visible = False
-    values.has_major_gridlines = False
-    values.minimum_scale = 0
-    values.maximum_scale = 3.6
-    categories = chart.category_axis
-    categories.reverse_order = True
-    categories.major_tick_mark = XL_TICK_MARK.NONE
-    categories.format.line.color.rgb = BORDER
+def flow(slide, points, color=INK_2, width=1.25, name="Flow"):
+    """An arrow along a path of (x, y) points in inches, bending at right angles."""
+    local = [(round(x * 1000), round(y * 1000)) for x, y in points]  # thousandths of an inch
+    builder = slide.shapes.build_freeform(*local[0], scale=Inches(1) / 1000)
+    builder.add_line_segments(local[1:], close=False)
+    item = builder.convert_to_shape()
+    item.name = name
+    item.fill.background()
+    item.line.color.rgb = color
+    item.line.width = Pt(width)
+    outline = item.line._get_or_add_ln()
+    outline.append(parse_xml(f'<a:round {nsdecls("a")}/>'))
+    outline.append(parse_xml(f'<a:tailEnd {nsdecls("a")} type="triangle" w="med" len="med"/>'))
+    drop_theme_style(item)
+    return item
+
+
+def step_node(slide, x, y, w, h, number, heading, ai=False):
+    """One numbered step of the pipeline diagram. Returns the top of its body."""
+    item = shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x, y, w, h, fill=DEEP if ai else CARD,
+                 line=None if ai else BORDER, radius=0.12, name=f"Step {number}: {heading}")
+    shadow(item, alpha=14 if ai else 8, blur_pt=8, distance_pt=2)
+    pin(slide, x + 0.16, y + 0.15, number, size=0.27, font_size=10, fill=LIME if ai else GREEN,
+        color=DEEP if ai else CARD)
+    text(slide, x + 0.52, y + 0.15, w - 0.6, 0.27, heading, size=12, bold=True, color=ON_DEEP if ai else INK,
+         anchor=MSO_ANCHOR.MIDDLE)
+    return y + 0.52
+
+
+def pairs(slide, x, y, w, rows, key_w, key_color, value_color, value_align=PP_ALIGN.LEFT, size=10.5, pitch=0.19):
+    for index, (key, value) in enumerate(rows):
+        row_y = y + index * pitch
+        text(slide, x, row_y, key_w, pitch, key, size=size, color=key_color)
+        text(slide, x + key_w, row_y, w - key_w, pitch, value, size=size, color=value_color, bold=True,
+             align=value_align)
 
 
 def slide_pipeline(prs):
     slide = new_slide(
         prs,
-        "This is how a typed question turns into a chart. The merchant types in their own words. The AI model "
-        "reads it and picks one of four reports, sales, returns, repeat customers or 'can't answer', and fills "
-        "in the blanks: the dates, what to measure, the breakdown and any filter. It copies the dates from a table "
-        "our code wrote, so 'last week' is always October 20 to 26. Then our code runs that report over the "
-        "store's orders, so the numbers are exact: the AI never does maths. The code also picks the chart: a "
-        "comparison is a bar, a trend is a line, one number is a card. Last, the AI writes a one-sentence answer "
-        "from the result.",
+        "This is how a typed question becomes a chart. Read it as six steps across three lanes: the merchant at "
+        "the top, the AI model in the green lane, and our code at the bottom. One, the merchant asks in their own "
+        "words. Two, before the AI sees anything, our code has already worked out what phrases like 'last week' "
+        "mean: October 20 to 26. Three, the AI picks one of four reports, sales, returns, repeat customers or "
+        "'can't answer', and fills in the blanks, copying the dates from that table. Four, our code runs the "
+        "report over the store's orders, so the numbers are exact, and picks the chart shape: comparing products "
+        "means a bar. That goes straight to the page. Five, the AI reads the result and writes one sentence. Six, "
+        "the merchant sees the chart and the answer. The AI never does the maths or draws the chart.",
     )
     kicker(slide, "How it works")
     title(slide, "How a question becomes a chart")
     text(slide, LEFT, 1.72, CONTENT_W, 0.4,
-         [[("The AI only chooses and fills in. ", {"color": GREEN, "bold": True}),
+         [[("The AI only chooses and writes. ", {"color": GREEN, "bold": True}),
            ("Code works out the dates, does the maths and picks the chart.", {})]],
          size=17, color=MUTED)
 
-    gap = 0.34
-    w = (CONTENT_W - 3 * gap) / 4
-    top, h = 2.45, 4.2
-    steps = [
-        ("message-square-text", "The merchant", "types a question"),
-        ("sparkles", "The AI model", "picks a report"),
-        ("database", "Our code", "runs the numbers"),
-        ("chart-column", "The page", "draws the chart"),
-    ]
-    captions = [
-        "In their own words, typos and all.",
-        "One of 4 reports, blanks filled in. Dates are copied, never worked out.",
-        "Over the store's orders. Exact numbers, no AI maths.",
-        "Comparing products means a bar. The AI adds one sentence.",
-    ]
-    xs = [LEFT + index * (w + gap) for index in range(4)]
-    for index, ((icon_name, who, does), x, caption) in enumerate(zip(steps, xs, captions)):
-        ai = index == 1
-        card(slide, x, top, w, h, fill=DEEP if ai else CARD, name=f"Step {index + 1}: {who}")
-        badge(slide, x + 0.25, top + 0.25, 0.48, icon_name, "deep" if ai else "white", LIME if ai else GREEN)
-        text(slide, x + 0.85, top + 0.24, w - 1.0, 0.3, who, size=15, bold=True, color=ON_DEEP if ai else INK)
-        text(slide, x + 0.85, top + 0.5, w - 1.0, 0.3, does, size=12, color=ON_DEEP_MUTED if ai else MUTED)
-        line(slide, x + 0.25, top + h - 1.0, x + w - 0.25, top + h - 1.0, DEEP_RULE if ai else BORDER,
-             name="Caption rule")
-        text(slide, x + 0.25, top + h - 0.84, w - 0.5, 0.7, caption, size=12, color=ON_DEEP_2 if ai else MUTED,
-             line_spacing=1.05)
-        if index < 3:
-            cx, cy = x + w + gap / 2, top + h / 2 - 0.25
-            shape(slide, MSO_SHAPE.OVAL, cx - 0.2, cy - 0.2, 0.4, 0.4, fill=CARD, line=BORDER, name="Arrow circle")
-            text(slide, cx - 0.2, cy - 0.2, 0.4, 0.4, "→", size=14, bold=True, color=GREEN, align=PP_ALIGN.CENTER,
-                 anchor=MSO_ANCHOR.MIDDLE)
-    body = top + 1.05  # where each step's artefact starts
+    lane_h = 1.45
+    tops = [2.3 + index * lane_h for index in range(3)]
+    merchant, ai, code = 0, 1, 2
+    shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, LEFT, tops[ai] + 0.04, CONTENT_W, lane_h - 0.08, fill=MINT, radius=0.16,
+          name="AI lane")
+    lanes = [("message-square-text", "Merchant", "asks, then reads"),
+             ("sparkles", "AI model", "only chooses and writes"),
+             ("database", "Our code", "dates, maths and the chart")]
+    for index, (icon_name, who, role) in enumerate(lanes):
+        cy = tops[index] + lane_h / 2
+        is_ai = index == ai
+        badge(slide, LEFT + 0.2, cy - 0.27, 0.46, icon_name, "lime" if is_ai else "white", DEEP if is_ai else GREEN)
+        text(slide, LEFT + 0.78, cy - 0.3, 1.2, 0.28, who, size=14, bold=True, color=DEEP if is_ai else INK)
+        text(slide, LEFT + 0.78, cy - 0.01, 1.15, 0.45, role, size=10.5, color=GREEN if is_ai else MUTED)
 
-    # 1. The question, as typed.
-    bubble(slide, xs[0] + w - 0.25, body + 0.5, "jakets returnd\nlast wk", size=19, fill=PAGE)
+    gap, x0 = 0.45, 2.75
+    w = (SLIDE_W - LEFT - 0.15 - x0 - 3 * gap) / 4
+    col = [x0 + index * (w + gap) for index in range(4)]
+    h = 1.16
+    ny = [top + (lane_h - h) / 2 for top in tops]
+    cy = [y + h / 2 for y in ny]
+    pad = 0.18
 
-    # 2. The report the model asks for.
-    x = xs[1]
-    rows = [("report", "Returns"), ("dates", "Oct 20 – 26"), ("measure", "units, refunds"), ("by", "product"),
-            ("only", "Outerwear")]
-    shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x + 0.2, body, w - 0.4, 1.95, fill=DEEP_CARD, radius=0.1,
-          name="Report request")
-    for index, (key, value) in enumerate(rows):
-        row_y = body + 0.17 + index * 0.33
-        text(slide, x + 0.38, row_y, 0.85, 0.3, key, size=12, color=ON_DEEP_MUTED)
-        text(slide, x + 1.2, row_y, w - 1.45, 0.3, value, size=12, color=ON_DEEP, bold=True)
+    body = step_node(slide, col[0], ny[merchant], w, h, 1, "Asks a question")
+    text(slide, col[0] + pad, body, w - 2 * pad, 0.55, "“which jackets came back the most last week”",
+         size=11, color=INK_2, line_spacing=1.05)
 
-    # 3. What the code returns.
-    x = xs[2]
-    shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x + 0.2, body, w - 0.4, 1.95, fill=FILL, line=BORDER, radius=0.1,
-          name="Result rows")
-    text(slide, x + 0.38, body + 0.15, w - 0.76, 0.25, "Returned last week", size=10, color=MUTED)
-    text(slide, x + 0.38, body + 0.15, w - 0.76, 0.25, "units", size=10, color=MUTED, align=PP_ALIGN.RIGHT)
-    for product, units, row_y, bold in [("Alpine Down Parka", "3", 0.48, False), ("Northridge Insulated", "1", 0.82, False),
-                                        ("Total", "4", 1.25, True)]:
-        text(slide, x + 0.38, body + row_y, w - 1.0, 0.3, product, size=12, color=INK, bold=bold)
-        text(slide, x + w - 0.78, body + row_y, 0.4, 0.3, units, size=12, color=INK, bold=bold, align=PP_ALIGN.RIGHT)
-    line(slide, x + 0.38, body + 1.17, x + w - 0.38, body + 1.17, BORDER, name="Total rule")
-    text(slide, x + 0.38, body + 1.58, w - 0.76, 0.25, "$792.15 refunded", size=11, color=MUTED)
+    body = step_node(slide, col[0], ny[code], w, h, 2, "Works out dates")
+    pairs(slide, col[0] + pad, body, w - 2 * pad,
+          [("last week", "Oct 20–26"), ("lately", "Sep 27–Oct 26")], key_w=0.74, key_color=MUTED, value_color=INK)
+    text(slide, col[0] + pad, body + 0.41, w - 2 * pad, 0.19, "a table the AI copies from", size=10.5, color=MUTED)
 
-    # 4. The chart and the answer.
-    x = xs[3]
-    mini_bar_chart(slide, x + 0.1, body - 0.05, w - 0.2, 1.05)
-    text(slide, x + 0.25, body + 1.05, w - 0.5, 0.9,
-         "“Last week (Oct 20–26), 4 jacket units were returned, totaling $792.15 in refunds.”",
-         size=11, color=INK_2, line_spacing=1.1)
+    body = step_node(slide, col[1], ny[ai], w, h, 3, "Picks a report", ai=True)
+    pairs(slide, col[1] + pad, body, w - 2 * pad, [("report", "Returns"), ("dates", "Oct 20–26"), ("only", "Outerwear")],
+          key_w=0.65, key_color=ON_DEEP_MUTED, value_color=ON_DEEP)
+
+    body = step_node(slide, col[2], ny[code], w, h, 4, "Runs the report")
+    pairs(slide, col[2] + pad, body, w - 2 * pad, [("Alpine Down Parka", "3"), ("Northridge Insulated", "1")],
+          key_w=w - 2 * pad - 0.3, key_color=INK_2, value_color=INK, value_align=PP_ALIGN.RIGHT)
+    text(slide, col[2] + pad, body + 0.41, w - 2 * pad, 0.19, "4 units, $792.15 refunded", size=10.5, color=MUTED)
+
+    body = step_node(slide, col[2], ny[ai], w, h, 5, "Writes the answer", ai=True)
+    text(slide, col[2] + pad, body, w - 2 * pad, 0.55,
+         "4 jacket units were returned, $792.15 refunded.", size=10.5, color=ON_DEEP_2,
+         line_spacing=1.05)
+
+    body = step_node(slide, col[3], ny[merchant], w, h, 6, "Sees the chart")
+    bar_room = w - 2 * pad - 0.25
+    for index, (product, units) in enumerate([("Alpine Down Parka", 3), ("Northridge Insulated", 1)]):
+        row_y = body - 0.04 + index * 0.31
+        text(slide, col[3] + pad, row_y, w - 2 * pad, 0.17, product, size=9.5, color=INK_2)
+        bar_w = bar_room * units / 3
+        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, col[3] + pad, row_y + 0.2, bar_w, 0.08, fill=GREEN, radius=0.03,
+              name=f"Bar: {product}")
+        text(slide, col[3] + pad + bar_w + 0.07, row_y + 0.16, 0.25, 0.16, str(units), size=9.5, bold=True, color=INK,
+             anchor=MSO_ANCHOR.MIDDLE)
+
+    right = [x + w for x in col]
+    mid = [x + w / 2 for x in col]
+    bend = [x + w + gap / 2 for x in col]
+    flow(slide, [(right[0], cy[merchant]), (bend[0], cy[merchant]), (bend[0], cy[ai]), (col[1], cy[ai])],
+         name="Question to the AI")
+    flow(slide, [(right[0], cy[code]), (bend[0], cy[code]), (bend[0], cy[ai]), (col[1], cy[ai])],
+         name="Date table to the AI")
+    flow(slide, [(right[1], cy[ai]), (bend[1], cy[ai]), (bend[1], cy[code]), (col[2], cy[code])],
+         name="Report request to the code")
+    flow(slide, [(mid[2], ny[code]), (mid[2], ny[ai] + h)], name="Result to the AI")
+    flow(slide, [(right[2], cy[ai]), (bend[2], cy[ai]), (bend[2], cy[merchant]), (col[3], cy[merchant])],
+         name="Answer to the page")
+    flow(slide, [(right[2], cy[code]), (mid[3], cy[code]), (mid[3], ny[merchant] + h)], name="Chart to the page")
+    text(slide, right[2] + 0.12, cy[code] - 0.27, 1.5, 0.2, "chart + numbers", size=10, color=MUTED)
     footer(slide, 3)
 
 
@@ -581,10 +589,10 @@ def slide_questions(prs):
     for index, (phrase, start, end, label) in enumerate(rows):
         y = first_row + index * row_gap
         text(slide, cx + 0.3, y + 0.2, 1.85, 0.3, phrase, size=14, color=INK, bold=True)
-        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, track_x, y + 0.3, track_w, 0.09, fill=PAGE, radius=0.045,
+        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, track_x, y + 0.27, track_w, 0.14, fill=PAGE, radius=0.07,
               name="Track")
         bar_w = max(0.14, at(end) - at(start))
-        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, at(end) - bar_w, y + 0.255, bar_w, 0.18, fill=GREEN, radius=0.09,
+        shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, at(end) - bar_w, y + 0.27, bar_w, 0.14, fill=GREEN, radius=0.07,
               name=f"Range: {label}")
         text(slide, at(end) - 2.6, y + 0.02, 2.6, 0.22, label, size=10, color=INK_2, bold=True, align=PP_ALIGN.RIGHT)
 
