@@ -47,6 +47,16 @@ Chat page: grey steps while it works → chart pops in, steps fold to "Show step
 | Tests (42, no API key needed; numbers checked against values computed separately) | ✅ Done |
 | Live-tested on a free model with real merchant questions, in the API and in the browser | ✅ Done |
 
+## Known limits
+
+- **About 25 questions a day on the free model.** OpenRouter's free tier allows 50 model requests a day without credits, and each question uses two: one to pick the report, one to write the answer. When the cap is hit, the chat says so and says it resets at midnight UTC. There is also a per-minute limit, which shows up as "the free AI model is busy right now".
+- **Monthly percentages jump around.** The data is 20 orders over six months, so some months have only one or two orders. The monthly repeat-customer share swings between 0% and 100% because of that, not because customer behaviour changed. Read these as rough signals and look at the order counts beside them.
+- **Sales and returns can't share one chart.** Sales are money and returns are counts, and every chart here has a single axis. So "sales and returns for jackets on one chart" gets a chart of the money figures, with returns and the return rate in the cards above it. Also, the sales report counts returns on orders *placed* in the period. A note under the chart gives the count of items *sent back* in the period, so the two aren't confused.
+- **Smaller ones:**
+  - "Today" is fixed at Oct 27, 2025, the last day of data, unless `STORE_TODAY` is set.
+  - The conversation isn't saved, so reloading the page starts fresh.
+  - The app isn't deployed yet (that comes in the next stage). To try it, clone the repo, add a free OpenRouter key and run it.
+
 ## Quick start
 
 Requires Node.js 22+.
@@ -76,6 +86,10 @@ Other scripts: `npm test` (vitest), `npm run typecheck`, `npm run lint`, `npm ru
 ## The chat page
 
 [`src/app/page.tsx`](src/app/page.tsx) is the merchant's chat. It uses the AI SDK's `useChat()` hook with `/api/chat`, and starts with six questions merchants actually asked (from the spreadsheet) as one-click suggestions.
+
+![A real run of the chat page: the question is typed, "Choosing a report…" appears in grey, then "Running the returns report for Oct 14–27, 2025…", then the chart lands and the steps fold into "Show steps (3)", the answer streams in under it, and finally the toggle is opened to show every step.](docs/screenshots/loading-steps.gif)
+
+*A real run at real speed, recorded with a headless browser's screencast. The free model took 6.3 seconds to answer. You can see the grey steps appear one by one, then fold into "Show steps (3)" when the chart lands, then the answer stream in under the chart. At the end the toggle is opened to show every step.*
 
 **What the merchant sees in each reply**, in the same spot where the answer will appear:
 
@@ -139,6 +153,7 @@ What I checked:
 
 - **Steps first, then the fold.** In Chrome, a `MutationObserver` recorded every change to the reply for a vague-date question ("which coats got returned most over the last couple weeks?"). The order was grey steps, then the chart with the steps folded, then the answer (timeline above).
 - **The tooltip.** Hovering a bar on the jacket returns chart shows the product and its return count (screenshot at the top).
+- **The GIF.** A full run was recorded at real speed (above). Every state of the reply is in it: "Choosing a report…", the "Running…" step, the fold into "Show steps (3)" as the chart lands, and the answer streaming in.
 - **The numbers.** Every chart was compared with the query engine: jacket returns, 8-week sales, the 30-day returns list, sales per customer, and the parkas and puffers question.
 - **The failure path.** A server started with a model name that doesn't exist showed the ✕ step, the friendly message and Try again.
 
@@ -380,6 +395,7 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 
 ```
 .
+├── docs/screenshots/                           # README screenshot (tooltip) and GIF (loading steps)
 ├── data/
 │   ├── orders.csv                              # Store order history, May–Oct 2025 (one row per line item)
 │   └── merchant-report-requests-2025-10-27.xlsx # 30 real merchant questions; source of the tool wording
