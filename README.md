@@ -111,4 +111,5 @@ src/lib/assistant/        tools, system prompt, model, the two-step stream
 src/app/api/chat/         streaming chat route
 src/components/           chat page and charts
 tests/                    engine, tools and chat-page tests
+deck/                     demo slides and the python-pptx script that builds them
 ```
