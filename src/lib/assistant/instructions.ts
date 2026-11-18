@@ -36,7 +36,7 @@ The store's data runs from ${firstDataDate} to ${lastDataDate}. Still query date
 
 ## The store
 Products: ${products}.
-Categories: ${dataset.categories.join(", ")}. Jackets, coats, parkas and puffers are in Outerwear.
+Categories: ${dataset.categories.join(", ")}. Jackets, coats, parkas and puffers are in Outerwear. Sweaters, cardigans and knits are in Knitwear. Tees and shirts are in Tops. Jeans, chinos and pants are in Bottoms. Beanies, gloves and hats are in Accessories.
 Sales channels: ${dataset.salesChannels.join(", ")}.
 Return reasons: ${dataset.returnReasons.join(", ")}.
 Sizes: ${dataset.sizes.join(", ")}. Colours: ${dataset.colors.join(", ")}.

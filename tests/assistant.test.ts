@@ -46,6 +46,8 @@ describe("instructions", () => {
     expect(instructions).toContain('"last week" / "last wk" / "through last Sunday": 2025-10-20 to 2025-10-26');
     expect(instructions).toContain("Make exactly ONE tool call");
     expect(instructions).toContain("Alpine Down Parka (Outerwear)");
+    // AQ-15 "which sweaters sell best" missed the Knitwear filter until the prompt said where sweaters live.
+    expect(instructions).toContain("Sweaters, cardigans and knits are in Knitwear.");
   });
 });
 
