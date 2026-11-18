@@ -4,6 +4,10 @@
 
 A free LLM on OpenRouter never reads the raw data and never does arithmetic. It picks **one** report tool, fills in **exact dates**, and then puts the tool's result into plain words. All numbers come from a deterministic query engine over the store's order history.
 
+![The chat page answering "jakets returnd last wk": the steps folded into "Show steps (3)" above a bar chart of returned units by product, with the tooltip on the Alpine Down Parka bar showing 3 returned units, and the plain-English answer underneath.](docs/screenshots/jacket-returns-tooltip.png)
+
+*"jakets returnd last wk": the steps have folded into "Show steps (3)", the tooltip on the Alpine Down Parka bar shows its 3 returned units, and the answer sits under the chart. Every number matches the data: 4 units and $792.15 refunded (Alpine Down Parka 3, $657.00; Northridge Insulated Jacket 1, $135.15).*
+
 ```
 POST /api/chat  { "question": "jakets returnd last wk" }
    │
@@ -124,6 +128,27 @@ Two fixes came out of the browser testing:
 
 - **"Returns 0" in the sales report was easy to misread.** In `salesReport`, returns belong to the orders *placed* in the period (so a return rate compares like with like), but 4 jackets were *sent back* that week. Sales results with return metrics now carry a warning, *"Returns here are from orders placed in these dates. Counted by return date, 4 items were sent back during these dates."*, which shows under the chart and which the model passes on.
 - **Rate-limit errors are now named correctly.** Retries wrap the provider's 429 in an `AI_RetryError`, so it used to fall through to "Something went wrong". [`errors.ts`](src/lib/assistant/errors.ts) unwraps it. A short busy spell says "try again in a minute"; the daily free cap says it resets at midnight UTC.
+
+### Built with Claude Code: the prompt, and what was checked
+
+The chat page was built from this prompt (excerpt):
+
+> On the chat page, show the loading state inside the assistant's reply bubble, in the same spot where the answer will appear. Don't add a chart skeleton or a spinner. While the merchant waits, show the steps the assistant is taking as a short list in muted grey text, built from the tool call and tool result that `/api/chat` already streams. Write each step in plain words, not code or JSON. […] When the chart is ready, have it pop in below the steps. At that moment, fold the steps into a small collapsed toggle above the chart, like "Show steps (3)". […] If something goes wrong, for example the free model is busy, keep the steps visible and show a friendly message in place of the chart.
+
+What I checked:
+
+- **Steps first, then the fold.** In Chrome, a `MutationObserver` recorded every change to the reply for a vague-date question ("which coats got returned most over the last couple weeks?"). The order was grey steps, then the chart with the steps folded, then the answer (timeline above).
+- **The tooltip.** Hovering a bar on the jacket returns chart shows the product and its return count (screenshot at the top).
+- **The numbers.** Every chart was compared with the query engine: jacket returns, 8-week sales, the 30-day returns list, sales per customer, and the parkas and puffers question.
+- **The failure path.** A server started with a model name that doesn't exist showed the ✕ step, the friendly message and Try again.
+
+What I changed because of those checks:
+
+- **Each step now stays readable.** The tool call and its result arrived together, so the merchant only ever saw "Choosing a report…". Each real step now stays on screen for at least 0.45 seconds.
+- **Whole numbers on count axes.** The returns axis was showing 0.75 and 2.25.
+- **Rate-limit errors are unwrapped.** Retries hid the 429, so a busy model showed "Something went wrong". It now shows the friendly message, and the free daily cap has its own message.
+- **Sales results with returns now carry a note.** That note gives the by-return-date count too, so "Returns 0" isn't misread.
+- **The model no longer says "No data issues to flag"** when there are no warnings.
 
 ## The chat route: `POST /api/chat`
 
