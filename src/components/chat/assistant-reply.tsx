@@ -17,8 +17,10 @@ function StepIcon({ status }: { status: Step["status"] }) {
   return <span aria-hidden className="w-2 shrink-0">✓</span>;
 }
 
-/** Minimum time each step stays as the newest line, so it can be read. */
+/** Minimum time each step stays as the newest line while the merchant waits, so it can be read. */
 const STEP_DWELL_MS = 450;
+/** Once the result is in, the remaining steps catch up quickly: the chart never waits for them. */
+const CATCH_UP_MS = 150;
 
 /**
  * How many steps to show. The report itself runs in milliseconds, so the tool
@@ -27,7 +29,7 @@ const STEP_DWELL_MS = 450;
  * merchant read what was run before the steps fold away. Nothing is invented:
  * only steps that have already happened are shown. Errors show everything at once.
  */
-function useRevealedCount(total: number, instant: boolean): number {
+function useRevealedCount(total: number, instant: boolean, dwellMs: number): number {
   const [count, setCount] = useState(1);
   const shownAt = useRef(0);
 
@@ -37,10 +39,10 @@ function useRevealedCount(total: number, instant: boolean): number {
 
   useEffect(() => {
     if (instant || count >= total) return;
-    const wait = Math.max(0, STEP_DWELL_MS - (Date.now() - shownAt.current));
+    const wait = Math.max(0, dwellMs - (Date.now() - shownAt.current));
     const timer = setTimeout(() => setCount((current) => current + 1), wait);
     return () => clearTimeout(timer);
-  }, [count, total, instant]);
+  }, [count, total, instant, dwellMs]);
 
   return instant ? total : Math.min(count, total);
 }
@@ -84,7 +86,8 @@ export function AssistantReply({
 
   const allSteps = stepsFor(toolPart, Boolean(error));
   const failed = Boolean(error) || allSteps.some((step) => step.status === "error");
-  const revealed = useRevealedCount(allSteps.length, failed);
+  const hasResult = toolPart?.state === "output-available";
+  const revealed = useRevealedCount(allSteps.length, failed, hasResult ? CATCH_UP_MS : STEP_DWELL_MS);
   const revealing = revealed < allSteps.length;
   const steps = allSteps
     .slice(0, revealed)
@@ -92,10 +95,9 @@ export function AssistantReply({
       revealing && index === revealed - 1 ? { ...step, label: step.activeLabel ?? step.label, status: "active" as const } : step,
     );
 
-  // The chart lands (and the steps fold) only once every step has been shown.
-  const resultReady = toolPart?.state === "output-available" && !revealing;
-  const output = resultReady ? toolPart.output : undefined;
-  const folded = resultReady && !failed;
+  // The chart lands as soon as the result arrives; the steps fold once they have all been shown.
+  const output = hasResult ? toolPart.output : undefined;
+  const folded = hasResult && !failed && !revealing;
 
   return (
     <div className="space-y-3">
@@ -132,7 +134,7 @@ export function AssistantReply({
         </div>
       )}
 
-      {text && !revealing && <AnswerText text={text} />}
+      {text && <AnswerText text={text} />}
     </div>
   );
 }

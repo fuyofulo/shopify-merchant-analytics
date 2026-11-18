@@ -1,4 +1,5 @@
 import { resolvePeriods, weekdayOf, type DatasetDescription } from "@/lib/analytics";
+import { addDays } from "@/lib/analytics/dates";
 
 /**
  * The system prompt. It gives the model "today", a table of time phrases
@@ -28,7 +29,7 @@ Today is ${weekdayOf(today)} ${today}. Weeks run Monday to Sunday.
 Use these exact dates for these phrases:
 ${periods}
 Other phrases:
-- "since <month>" = the 1st of that month to ${today}. A month name on its own = that whole month.
+- "since <month or date>" = from that day to ${addDays(today, -1)} (full days, ending yesterday). A month name on its own = that whole month.
 - Dates without a year are in ${today.slice(0, 4)}, unless that would be after today.
 - If no period is mentioned, use all data: ${firstDataDate} to ${today}.
 The store's data runs from ${firstDataDate} to ${lastDataDate}. Still query dates outside it if asked; the tool will report what is missing.

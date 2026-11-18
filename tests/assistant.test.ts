@@ -17,13 +17,16 @@ describe("resolvePeriods", () => {
     expect(periodFor("last week")).toMatchObject({ startDate: "2025-10-20", endDate: "2025-10-26" });
     expect(periodFor("last wk")).toMatchObject({ startDate: "2025-10-20", endDate: "2025-10-26" });
     expect(periodFor("this week")).toMatchObject({ startDate: "2025-10-27", endDate: "2025-10-27" });
-    expect(periodFor("last 14 days")).toMatchObject({ startDate: "2025-10-14", endDate: "2025-10-27" });
-    expect(periodFor("last 30 days")).toMatchObject({ startDate: "2025-09-28", endDate: "2025-10-27" });
+    expect(periodFor("last 14 days")).toMatchObject({ startDate: "2025-10-13", endDate: "2025-10-26" });
+    // Erik's AQ-01 expects "last 30 days" = 2025-09-27..2025-10-26: full days, ending yesterday.
+    expect(periodFor("last 30 days")).toMatchObject({ startDate: "2025-09-27", endDate: "2025-10-26" });
     expect(periodFor("last 8 weeks (full Monday–Sunday weeks)")).toMatchObject({ startDate: "2025-09-01", endDate: "2025-10-26" });
     expect(periodFor("this month")).toMatchObject({ startDate: "2025-10-01", endDate: "2025-10-27" });
     expect(periodFor("last month")).toMatchObject({ startDate: "2025-09-01", endDate: "2025-09-30" });
     expect(periodFor("this season")).toMatchObject({ startDate: "2025-09-01", endDate: "2025-10-27" });
-    expect(periodFor("since summer")).toMatchObject({ startDate: "2025-06-01", endDate: "2025-10-27" });
+    expect(periodFor("since summer")).toMatchObject({ startDate: "2025-06-01", endDate: "2025-10-26" });
+    // Erik's AQ-09 expects "since labor day" = 2025-09-01..2025-10-26.
+    expect(periodFor("since Labor Day")).toMatchObject({ startDate: "2025-09-01", endDate: "2025-10-26" });
     expect(periodFor("all time")).toMatchObject({ startDate: "2025-05-06", endDate: "2025-10-27" });
   });
 
@@ -31,6 +34,8 @@ describe("resolvePeriods", () => {
     expect(periodFor("last month", "2026-01-10")).toMatchObject({ startDate: "2025-12-01", endDate: "2025-12-31" });
     expect(periodFor("this season", "2026-01-10")).toMatchObject({ startDate: "2025-12-01" });
     expect(periodFor("since summer", "2026-03-01")).toMatchObject({ startDate: "2025-06-01" });
+    expect(periodFor("since Labor Day", "2026-08-15")).toMatchObject({ startDate: "2025-09-01" });
+    expect(periodFor("since Labor Day", "2026-09-20")).toMatchObject({ startDate: "2026-09-07" });
   });
 });
 
