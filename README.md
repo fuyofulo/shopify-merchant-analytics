@@ -44,6 +44,8 @@ Chat page: grey steps while it works → chart pops in, steps fold to "Show step
 | Chat page: grey steps while waiting, chart from the tool's `chart` field, answer under it | ✅ Done |
 | Returned-order-lines list (`returnsReport` with `view: "list"`) | ✅ Done |
 | Data API (`/api/analytics/query`, `/api/analytics/dataset`) | ✅ Done |
+| Vercel preview deploy, key in Vercel's encrypted env (Preview only) | ✅ Done |
+| Live run of Erik Vogt's acceptance questions on the preview (5 of 20, see below) | ✅ Done |
 | Tests (42, no API key needed; numbers checked against values computed separately) | ✅ Done |
 | Live-tested on a free model with real merchant questions, in the API and in the browser | ✅ Done |
 
@@ -55,7 +57,42 @@ Chat page: grey steps while it works → chart pops in, steps fold to "Show step
 - **Smaller ones:**
   - "Today" is fixed at Oct 27, 2025, the last day of data, unless `STORE_TODAY` is set.
   - The conversation isn't saved, so reloading the page starts fresh.
-  - The app isn't deployed yet (that comes in the next stage). To try it, clone the repo, add a free OpenRouter key and run it.
+  - There is only a Vercel **preview** so far, and it sits behind Vercel's login. The public production deploy comes in the next stage. To try it yourself, clone the repo, add a free OpenRouter key and run it.
+
+## Live preview: Erik Vogt's acceptance questions
+
+The app is deployed as a Vercel preview: [shopify-merchant-analytics-nvlrescgh-fuyofulo-613da217.vercel.app](https://shopify-merchant-analytics-nvlrescgh-fuyofulo-613da217.vercel.app). Vercel's deployment protection is on, so it asks you to sign in to the Vercel team.
+
+These five questions from Erik's acceptance set (`data/acceptance-questions-erik-vogt.xlsx`) were typed into the live preview in Chrome, each in a fresh chat. "First chart" is the number of seconds from pressing Ask to the chart appearing on screen, measured in the page with a `MutationObserver`. Every number shown was checked against the query engine.
+
+| ID | Question | Tool called | Resolved dates | First chart | What showed |
+| --- | --- | --- | --- | --- | --- |
+| AQ-03 | which jackets came back the most last week | `returnsReport`: returned units and refunds by product, Outerwear | Oct 20–26, 2025, by return date (Erik expects 2025-10-20..2025-10-26) | 5.26s | Bar: Alpine Down Parka 3, Northridge Insulated Jacket 1. 4 units, $792.15 refunded. |
+| AQ-07 | what's my ad spend on Meta this month | `cannotAnswer`: "ad spend on Meta (Facebook/Instagram) campaigns" | None (no report run) | No chart, by design. Answer at 4.71s | No chart and no made-up numbers. It says ad spend isn't in the store data and offers Instagram-channel sales instead. |
+| AQ-02 | best sellers this season | `salesReport`: net sales and units by product, top 10 | Sep 1 – Oct 27, 2025 ("this season") | 2.99s | Bar: Alpine Down Parka $854.10, Northridge $596.25, Merino Crew Sweater $264.00. $2,492.35 in total. |
+| AQ-13 | revenue by wk recently | `salesReport`: net sales by week | Sep 28 – Oct 27, 2025 ("recently" = last 30 days) | 2.64s | Line: peaks in the week of Oct 13 at $635.40. $2,261.25 in total. |
+| AQ-08 | how are returns doing | `returnsReport`: returns, returned units, refunds | May 6 – Oct 27, 2025 (no date given = all data) | 2.69s | Metrics cards: 8 returns, $1,116.94 refunded, with a note that return data starts on Jul 8. |
+
+Against Erik's pass marks for these five:
+
+- **Right tool and dates:** 5 of 5.
+- **Rendered without a crash:** 5 of 5.
+- **First chart under 5 seconds:** 3 of the 4 questions that draw a chart. AQ-03 missed at 5.26s. The free model took 4.80s to make the tool call, and the step reveal (each step stays on screen for at least 0.45s) pushed it over.
+
+What the run showed:
+
+- **The free model is most of the wait.** The tool call took 2.2–4.8 seconds, and the report itself takes milliseconds. The 0.45-second step reveal adds about half a second before every chart. Showing the chart as soon as the result arrives, while the steps finish revealing, would win that time back.
+- **Weekly lines show partial weeks at the ends.** AQ-13's range starts on Sunday Sep 28, so its first point, "week of Sep 22", holds only that one day ($0). Its last point holds only Oct 27 ($182.20). The answer calls out the partial current week, but the chart doesn't mark either partial week.
+
+### Deploying (Vercel CLI)
+
+```bash
+vercel link                                                   # creates the project and connects the GitHub repo
+vercel env add OPENROUTER_API_KEY preview --sensitive         # paste the key; Vercel stores it encrypted
+vercel deploy                                                 # preview deploy
+```
+
+The key lives only in Vercel's encrypted environment settings and in your local `.env.local`, which git ignores. `.vercelignore` keeps every `.env*` file except `.env.example` out of the upload. `next.config.ts` bundles `data/orders.csv` with `/api/chat` and `/api/analytics/*`, because those routes read it from disk at runtime.
 
 ## Quick start
 
@@ -73,7 +110,7 @@ curl -N -X POST http://localhost:3000/api/chat \
   -d '{"question":"jakets returnd last wk"}'
 ```
 
-Other scripts: `npm test` (vitest), `npm run typecheck`, `npm run lint`, `npm run build`.
+Other scripts: `npm test` (vitest), `npm run typecheck`, `npm run lint`, `npm run build`. Deploying is covered under "Live preview" above.
 
 ### Environment (`.env.local`)
 
@@ -398,7 +435,8 @@ Dimensions: `day`, `week` (Monday start), `month`, `product`, `category`, `varia
 ├── docs/screenshots/                           # README screenshot (tooltip) and GIF (loading steps)
 ├── data/
 │   ├── orders.csv                              # Store order history, May–Oct 2025 (one row per line item)
-│   └── merchant-report-requests-2025-10-27.xlsx # 30 real merchant questions; source of the tool wording
+│   ├── merchant-report-requests-2025-10-27.xlsx # 30 real merchant questions; source of the tool wording
+│   └── acceptance-questions-erik-vogt.xlsx      # Erik Vogt's 20 acceptance questions for the live dashboard
 ├── src/
 │   ├── app/
 │   │   ├── page.tsx                  # The chat page (suggested questions from the spreadsheet)

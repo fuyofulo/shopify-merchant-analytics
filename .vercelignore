@@ -1,0 +1,3 @@
+# Never upload local secrets; the OpenRouter key lives in Vercel's encrypted env settings.
+.env*
+!.env.example
