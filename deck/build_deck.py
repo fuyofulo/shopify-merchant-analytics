@@ -346,7 +346,7 @@ def quiet_chart_frame(chart):
 def slide_problem(prs):
     slide = new_slide(
         prs,
-        f"Hi, I'm {AUTHOR}, and I built this. This is a real question a merchant sent on October 27. That day "
+        f"[0:00] Hi, I'm {AUTHOR}, and I built this. This is a real question a merchant sent on October 27. That day "
         "30 requests came in, by email, support chat, the admin search box and the Community forum, all in the "
         "merchants' own words. I sorted them by the report that answers each one: 14 need a sales report, 9 a "
         "returns report and 5 a repeat customers report. The other 2 ask about ad spend, which isn't in the store "
@@ -430,10 +430,13 @@ def slide_problem(prs):
 def slide_interface(prs):
     slide = new_slide(
         prs,
-        "Here's what the merchant sees. They type 'which jackets came back the most last week'. While it works, "
-        "grey steps say what it's doing, then fold away once the chart lands. The chart shows the exact dates it "
-        "used, October 20 to 26, and underneath is a short answer: 4 jacket units came back, $792.15 refunded, "
-        "mostly the Alpine Down Parka. I'll show this live in a moment.",
+        "[0:50, switch to the browser at shopify-merchant-analytics.vercel.app] Here's the live URL. I'll type "
+        "the first question from Erik's brief, word for word: 'Which winter jackets came back as returns last "
+        "week?' [Press Ask] While it works, the grey steps say what it's doing: which report it chose, and the "
+        "exact dates. [Chart appears] There's the chart, usually in 2 to 3 seconds. The dates sit under the "
+        "title, October 20 to 26, so 'last week' is never a guess. And the answer: 4 jacket units came back, "
+        "$792.15 refunded, 3 of them the Alpine Down Parka. [If it's slow or fails, press Try again once, then "
+        "come back to this slide: it's the same question, answered earlier.]",
     )
     split = 5.15
     panel(slide, split)
@@ -517,14 +520,12 @@ def pairs(slide, x, y, w, rows, key_w, key_color, value_color, value_align=PP_AL
 def slide_pipeline(prs):
     slide = new_slide(
         prs,
-        "This is how a typed question becomes a chart. Read it as six steps across three lanes: the merchant at "
-        "the top, the AI model in the green lane, and our code at the bottom. One, the merchant asks in their own "
-        "words. Two, before the AI sees anything, our code has already worked out what phrases like 'last week' "
-        "mean: October 20 to 26. Three, the AI picks one of four reports, sales, returns, repeat customers or "
-        "'can't answer', and fills in the blanks, copying the dates from that table. Four, our code runs the "
-        "report over the store's orders, so the numbers are exact, and picks the chart shape: comparing products "
-        "means a bar. That goes straight to the page. Five, the AI reads the result and writes one sentence. Six, "
-        "the merchant sees the chart and the answer. The AI never does the maths or draws the chart.",
+        "[2:20] That's what you just saw, step by step. Three lanes: the merchant, the AI model in green, and our"
+        " code. One, the merchant asks. Two, before the AI sees anything, our code has worked out what 'last "
+        "week' means: October 20 to 26. Three, the AI picks one of four reports, sales, returns, repeat customers"
+        " or 'can't answer', and copies the dates from that table. Four, our code runs the report on the orders, "
+        "so the numbers are exact, and picks the chart: comparing products means a bar. Five, the AI writes one "
+        "sentence from the result. Six, the merchant sees both. The AI never does the maths or draws the chart.",
     )
     kicker(slide, "How it works")
     title(slide, "How a question becomes a chart")
@@ -614,12 +615,11 @@ def slide_pipeline(prs):
 def slide_questions(prs):
     slide = new_slide(
         prs,
-        "Merchants rarely give exact dates, so the code turns vague words into exact ranges before the AI sees "
-        "the question. Each bar is the range a phrase becomes. 'Last week' is Monday to Sunday, October 20 to 26. "
-        "'Lately' and 'recently' are the last 30 full days. With no date at all it uses all the data, and the range "
-        "always shows under the chart title. On the right is 'revenue by wk recently'. It answers three kinds of "
-        "question, says plainly when something like ad spend isn't in the data, and the median time from pressing "
-        "Ask to seeing the chart was 2.4 seconds.",
+        "[3:15] Merchants rarely give exact dates, so code turns vague words into exact ranges. 'Last week' is "
+        "Monday to Sunday, October 20 to 26. 'Lately' and 'recently' are the last 30 full days, September 27 to "
+        "October 26. No date at all means all the data, May 6 to October 27. The range always shows under the "
+        "chart title. On the right is 'revenue by wk recently', a weekly line. Along the bottom: 2.4 seconds "
+        "median to the chart, three reports, and no made-up charts: ad spend or stock gets 'not in the data'.",
     )
     split = 7.7
     panel(slide, split)
@@ -732,12 +732,13 @@ def threshold_as_line(chart, color, label):
 def slide_results(prs):
     slide = new_slide(
         prs,
-        "Erik gave us 20 acceptance questions and three pass marks. We ran all 20 on the live preview, each in a "
-        "fresh chat. 19 picked the right report, and the bar is 18. Nothing crashed. And every chart appeared in "
-        "under 5 seconds, the dashed line. The green bar is AQ-03: it took 5.26 seconds at first, because the chart "
-        "waited for the loading steps. We changed that and it's now 4.63. The one miss was 'which sweaters sell "
-        "best': it charted every product instead of only knitwear. The prompt now says where sweaters belong, and "
-        "we'll re-run it to confirm.",
+        "[4:00] Erik gave us 20 acceptance questions and three pass marks. We ran all 20 on the Vercel preview, "
+        "each in a fresh chat, and checked every number against the query engine. 19 picked the right report; the"
+        " pass mark is 18. Nothing crashed. Every chart appeared in under 5 seconds, the dashed line. The green "
+        "bar is AQ-03: 5.26 seconds at first, because the chart waited for the loading steps. We changed that, "
+        "and it's now 4.63. The one miss was 'which sweaters sell best': right report, but it charted every "
+        "product instead of only knitwear. The prompt now says sweaters are in Knitwear, and it gets re-run once "
+        "the free daily limit allows.",
     )
     kicker(slide, "Acceptance test")
     title(slide, "Erik's 20 questions: every pass mark met")
@@ -825,11 +826,12 @@ def slide_results(prs):
 def slide_status(prs):
     slide = new_slide(
         prs,
-        "So, is it ready for Black Friday? Yes. It's live today at shopify-merchant-analytics.vercel.app, with the "
-        "AI key in place, and it passed Erik's questions. One step is left before November 28: add $10 of "
-        "OpenRouter credits. The free plan stops at about 25 questions a day; with credits it's about 500. The "
-        "sweaters fix from the last slide gets re-run as soon as the daily limit allows. Happy to take questions, "
-        f"and you can reach me on GitHub, X or email, all at the bottom of this slide.",
+        "[4:50] So, is it ready for Black Friday? Yes. It's live at shopify-merchant-analytics.vercel.app with "
+        "the AI key in place, and it met all three of Erik's pass marks. One step is left before November 28: $10"
+        " of OpenRouter credits, because the free plan stops at about 25 questions a day. And one decision for "
+        "November 7: I'd send Priya the three reports you've seen, sales and best sellers, returns and why, and "
+        "repeat customers. Ad spend, stock and profit stay 'not in the data' until we have that data. My contact "
+        "details are at the bottom. Happy to take questions. [5:45]",
         dark=True,
     )
     kicker(slide, "Status", y=0.8, color=LIME)
