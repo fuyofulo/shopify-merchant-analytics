@@ -296,6 +296,28 @@ def footer(slide, number, number_on_panel=False):
          color=ON_DEEP_MUTED if number_on_panel else MUTED, align=PP_ALIGN.RIGHT)
 
 
+AUTHOR = "fuyofulo"
+CONTACTS = [
+    ("github", "github.com/fuyofulo", "https://github.com/fuyofulo"),
+    ("x", "x.com/fuyofulo", "https://x.com/fuyofulo"),
+    ("mail", "pheonixdiaz625@gmail.com", "mailto:pheonixdiaz625@gmail.com"),
+]
+
+
+def contact_row(slide, x, y, size=12, color=ON_DEEP_2, icon_color="lime", align_right=False, gap=0.34):
+    """GitHub, X and email in one row, each one a link. x is the row's left edge, or its right edge."""
+    mark, mark_gap, row_h = size / 60, 0.08, size * 1.3 / 72
+    widths = [mark + mark_gap + text_width(label, size) + 0.05 for _, label, _ in CONTACTS]
+    cursor = x - sum(widths) - gap * (len(widths) - 1) if align_right else x
+    for (icon_name, label, url), item_w in zip(CONTACTS, widths):
+        logo = icon(slide, icon_name, icon_color, cursor, y + (row_h - mark) / 2, mark)
+        logo.click_action.hyperlink.address = url
+        box = text(slide, cursor + mark + mark_gap, y, item_w - mark - mark_gap, row_h, label, size=size, color=color,
+                   anchor=MSO_ANCHOR.MIDDLE, name=f"Contact: {icon_name}")
+        box.click_action.hyperlink.address = url
+        cursor += item_w + gap
+
+
 def quiet_chart_frame(chart):
     """No fill or border on the chart or plot area, so the chart sits straight on its card."""
     no_fill = f'<c:spPr {nsdecls("c", "a")}><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>'
@@ -311,54 +333,74 @@ def quiet_chart_frame(chart):
 def slide_problem(prs):
     slide = new_slide(
         prs,
-        "This is a real question a merchant sent us on October 27. Merchants ask in their own "
-        "words, by email, support chat, the admin search box and the Community forum. On the right are a few more "
-        "from the same day. Someone has to turn each one into a report by hand, and several merchants needed the "
-        "answer before placing their Black Friday reorder. So I built a chat dashboard: they type the question "
-        "and get a chart and a short answer back, usually in under 3 seconds.",
+        f"Hi, I'm {AUTHOR}, and I built this. This is a real question a merchant sent on October 27. That day "
+        "30 requests came in, by email, support chat, the admin search box and the Community forum, all in the "
+        "merchants' own words. I sorted them by the report that answers each one: 14 need a sales report, 9 a "
+        "returns report and 5 a repeat customers report. The other 2 ask about ad spend, which isn't in the store "
+        "data. So 28 of 30 fit three reports, and those three reports are what the dashboard runs. Merchants type "
+        "the question and get a chart and a short answer back, usually in under 3 seconds.",
     )
     split = 7.45
     panel(slide, 0, w=split, name="Green half")
-    kicker(slide, "Shopify Merchant Analytics", y=0.8, color=LIME)
-    title(slide, "“Which jackets came\nback as returns\nlast week?”", y=1.35, size=48, color=ON_DEEP, h=2.3, w=6.6)
-    text(slide, LEFT, 3.8, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
-    text(slide, LEFT, 4.38, 6.1, 1.3,
-         "Merchants ask in their own words. Before Black Friday they need the answer in seconds, not a report "
-         "request.", size=20, color=ON_DEEP_2, line_spacing=1.1)
-    text(slide, LEFT, 5.95, 6.4, 0.8,
+    kicker(slide, "Shopify Merchant Analytics", y=0.75, color=LIME)
+    title(slide, "“Which jackets came\nback as returns\nlast week?”", y=1.2, size=48, color=ON_DEEP, h=2.2, w=6.6)
+    text(slide, LEFT, 3.62, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
+    text(slide, LEFT, 4.15, 6.1, 0.75,
+         "Merchants ask in their own words. Before Black Friday they need answers in seconds.",
+         size=20, color=ON_DEEP_2, line_spacing=1.1)
+    text(slide, LEFT, 5.12, 6.4, 0.75,
          ["Now they ask the dashboard,", [("and get a chart back in under 3 seconds.", {"color": LIME, "bold": True})]],
          size=20, color=ON_DEEP)
 
-    # An inbox of the day's requests, as a Shopify admin card.
+    # Who built it, and how to reach them.
+    line(slide, LEFT, 6.12, split - LEFT, 6.12, DEEP_RULE, name="Byline rule")
+    text(slide, LEFT, 6.3, 6, 0.3, f"Built by {AUTHOR}", size=14, bold=True, color=ON_DEEP)
+    contact_row(slide, LEFT, 6.64, size=11, gap=0.32)
+
+    # The day's 30 requests, one square each, grouped by the report that answers them.
     x, w, y = split + 0.55, SLIDE_W - split - 0.55 - 0.55, 0.8
-    requests = [
-        ("search", "best seller since summer?", "Admin search"),
-        ("messages-square", "sales been weird lately, can you show me whats going on", "Support chat"),
-        ("mail", "…before we place our BFCM reorder with our supplier we need to know which parkas and puffers "
-                 "had the most returns…", "Email"),
-        ("users", "how do i see which coats got returned most over the last couple weeks? need it before i reorder",
-         "Shopify Community"),
+    inner_x, inner_w = x + 0.3, w - 0.6
+    groups = [
+        ("Sales report", 14, GREEN, "“best seller since summer?”"),
+        ("Returns report", 9, GREEN, "“how are returns doing”"),
+        ("Repeat customers report", 5, GREEN, "“are repeat customers growing or not”"),
+        ("Ad spend: not in the store data", 2, BAR_REST, "“…what was my ROAS on the fall jacket campaign?”"),
     ]
-    message_w = w - 0.95
-    rows = [(name, wrap(message, 13, message_w), source) for name, message, source in requests]
-    heights = [len(lines) * 13 * 1.2 / 72 + 0.62 for _, lines, _ in rows]
-    inbox_h = 0.95 + sum(heights) + 0.1
-    card(slide, x, y, w, inbox_h, name="Report requests")
-    text(slide, x + 0.3, y + 0.25, 3, 0.3, "Report requests", size=15, bold=True)
-    text(slide, x + 0.3, y + 0.53, 3, 0.25, "October 27, 2025", size=11, color=MUTED)
+    row_h, header_h, verdict_h = 1.04, 0.95, 0.68
+    card(slide, x, y, w, header_h + row_h * len(groups) + verdict_h, name="Report requests")
+    text(slide, inner_x, y + 0.25, 3, 0.3, "Report requests", size=15, bold=True)
+    text(slide, inner_x, y + 0.53, 3, 0.25, "October 27, 2025", size=11, color=MUTED)
     pill_label = "30 that day"
     pill_w = text_width(pill_label, 11, bold=True) + 0.32
     shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, x + w - 0.3 - pill_w, y + 0.3, pill_w, 0.3, fill=MINT, radius=0.15,
           name="Count pill")
     text(slide, x + w - 0.3 - pill_w, y + 0.3, pill_w, 0.3, pill_label, size=11, bold=True, color=GREEN,
          align=PP_ALIGN.CENTER, anchor=MSO_ANCHOR.MIDDLE)
-    row_y = y + 0.95
-    for (name, lines, source), h in zip(rows, heights):
+
+    most = max(count for _, count, _, _ in groups)
+    pitch = inner_w / most
+    unit = pitch * 0.74
+    row_y = y + header_h
+    for label, count, color, quote in groups:
         line(slide, x, row_y, x + w, row_y, BORDER, name="Row rule")
-        badge(slide, x + 0.28, row_y + 0.22, 0.4, name, "green", MINT)
-        text(slide, x + 0.85, row_y + 0.2, message_w, h - 0.5, "\n".join(lines), size=13, color=INK)
-        text(slide, x + 0.85, row_y + h - 0.4, message_w, 0.25, source, size=11, color=MUTED)
-        row_y += h
+        text(slide, inner_x, row_y + 0.17, inner_w - 0.5, 0.25, label, size=13, bold=True,
+             color=INK if color == GREEN else MUTED)
+        text(slide, inner_x + inner_w - 0.5, row_y + 0.17, 0.5, 0.25, str(count), size=13, bold=True,
+             color=GREEN if color == GREEN else MUTED, align=PP_ALIGN.RIGHT)
+        for index in range(count):
+            shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, inner_x + index * pitch, row_y + 0.46, unit, unit, fill=color,
+                  radius=0.04, name=f"{label}: request {index + 1}")
+        text(slide, inner_x, row_y + 0.46 + unit + 0.08, inner_w, 0.22, quote, size=12, color=MUTED)
+        row_y += row_h
+
+    # The verdict: three reports cover almost everything.
+    line(slide, x, row_y, x + w, row_y, BORDER, name="Row rule")
+    shape(slide, MSO_SHAPE.ROUNDED_RECTANGLE, inner_x - 0.08, row_y + 0.14, inner_w + 0.16, 0.4, fill=MINT,
+          radius=0.1, name="Verdict")
+    icon(slide, "circle-check", "green", inner_x + 0.06, row_y + 0.23, 0.22)
+    text(slide, inner_x + 0.38, row_y + 0.14, inner_w - 0.4, 0.4,
+         [[("28 of 30", {"bold": True, "color": GREEN}), (" fit one of three reports.", {"bold": True})]],
+         size=13, color=INK, anchor=MSO_ANCHOR.MIDDLE)
 
 
 # ---------------------------------------------------------------------------------------------
@@ -766,7 +808,8 @@ def slide_status(prs):
         "So, is it ready for Black Friday? Yes. It's live today at shopify-merchant-analytics.vercel.app, with the "
         "AI key in place, and it passed Erik's questions. One step is left before November 28: add $10 of "
         "OpenRouter credits. The free plan stops at about 25 questions a day; with credits it's about 500. The "
-        "sweaters fix from the last slide gets re-run as soon as the daily limit allows. Happy to take questions.",
+        "sweaters fix from the last slide gets re-run as soon as the daily limit allows. Happy to take questions, "
+        f"and you can reach me on GitHub, X or email, all at the bottom of this slide.",
         dark=True,
     )
     kicker(slide, "Status", y=0.8, color=LIME)
@@ -799,7 +842,8 @@ def slide_status(prs):
         text(slide, label_x, line_y + 0.92, label_w, 0.8, detail, size=14, color=ON_DEEP_2, align=align,
              line_spacing=1.1)
 
-    text(slide, LEFT, 6.25, 6, 0.6, "Questions?", size=32, bold=True, color=LIME, tracking=-1)
+    text(slide, LEFT, 6.25, 3, 0.6, "Questions?", size=32, bold=True, color=LIME, tracking=-1)
+    contact_row(slide, SLIDE_W - LEFT, 6.38, size=14, color=ON_DEEP, align_right=True, gap=0.42)
 
 
 def main():
