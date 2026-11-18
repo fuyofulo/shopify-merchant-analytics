@@ -1,21 +1,21 @@
 # Demo deck outline
 
-Six slides for the live demo. Q&A takes the last 4 minutes. `build_deck.py` turns this into `shopify-merchant-analytics.pptx`.
+Six slides for the live demo. Q&A takes the last 4 minutes. `build_deck.py` turns this into `shopify-merchant-analytics.pptx`. The opening and closing slides are dark and the rest are light, in the app's own colours.
 
-1. **Merchants ask in their own words. Now they get a chart back.**
-   Four real requests from `data/merchant-report-requests-2025-10-27.xlsx`. 30 requests were logged on Oct 27, many needed before the Black Friday reorder. The fix: type the question, get a chart and a short answer.
+1. **"jakets returnd last wk"** (the problem)
+   One real typo-filled request as the headline, with four more from `data/merchant-report-requests-2025-10-27.xlsx` as chat bubbles. The fix: ask the dashboard, get a chart in under 3 seconds.
 
-2. **Type a question. Get a chart and a short answer.** (the interface)
-   Screenshot: jacket returns last week. Four callouts: own words, grey steps, exact dates under the title, short answer.
+2. **Type a question. Get a chart and an answer.** (the interface)
+   The jacket returns screenshot in a browser window, with numbered pins for the steps, the exact dates and the short answer.
 
-3. **How a question becomes a chart.** (for Tomasz and Hana)
-   You type → the AI picks one report and fills in the details → our code runs the numbers → the page draws the chart and the AI writes one sentence. The AI never does maths or dates.
+3. **How a question becomes a chart** (for Tomasz and Hana)
+   The real objects at each step: the typed question → the report the AI asks for (Returns, Oct 20–26, Outerwear) → the rows our code returns → the bar chart and the one-sentence answer. The AI only chooses and fills in. Code does the dates, the maths and the chart.
 
-4. **Vague questions get exact dates, in seconds.** (speed and "last week")
-   What it answers: sales and best sellers, returns and why, repeat customers. Vague words become exact dates. Ad spend and stock get a clear "not in the data". Screenshot: weekly revenue for "recently". Most charts land in under 3 seconds.
+4. **Vague words become exact dates** (speed and "last week")
+   A timeline showing the range each phrase becomes, next to the weekly revenue chart for "recently". Along the bottom: 2.4 s median to chart, 3 reports, no made-up charts.
 
-5. **Erik's 20 questions: all three pass marks met.** (results)
-   19 of 20 right report (needs 18), 0 crashes, slowest chart 4.63s (needs under 5s). Native chart: seconds to first chart per question. The one miss, AQ-15, has been fixed but not re-run yet.
+5. **Erik's 20 questions: every pass mark met** (results)
+   19/20 right report, 0 crashes, 4.63 s slowest. A native chart of seconds to chart per question, with the 5 s pass mark as a dashed line. AQ-15 is the one miss: fixed, but not re-run yet.
 
-6. **Ready for Black Friday, November 28.** (for Priya)
-   It's live on Vercel and tested. Three small steps before Nov 28: put the key on the public URL, add OpenRouter credits for more than ~25 questions a day, and re-run the sweaters question.
+6. **Ready for Black Friday** (for Priya)
+   A timeline from now to Nov 28 with three small steps: put the key on the public URL, add OpenRouter credits, and re-run the sweaters question.
