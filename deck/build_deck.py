@@ -9,6 +9,8 @@ acceptance questions.
 
 Look: Shopify's admin palette. Light grey page, white cards, Shopify green for emphasis, deep green
 panels behind the product shots, and the bag-logo green as the highlight on dark slides.
+Titles and big numbers are in Georgia at regular weight, body text in Arial: both ship with every Mac
+and Windows PC, so the deck looks the same wherever it's opened.
 """
 
 from datetime import date
@@ -56,7 +58,10 @@ SCREEN_RULE = RGBColor(0x2C, 0x2C, 0x2A)
 SCREEN_INK = RGBColor(0xF0, 0xEF, 0xEC)
 SCREEN_MUTED = RGBColor(0x89, 0x87, 0x81)
 
-FONT = "Arial"
+FONT = "Arial"  # body text
+HEAD_FONT = "Georgia"  # titles and big numbers: a regular-weight serif, on every Mac and Windows PC
+HEAD_BOLD = False
+HEAD_TRACKING = -0.01  # points of letter spacing per point of size
 SLIDE_W, SLIDE_H = 13.333, 7.5
 LEFT = 0.7
 CONTENT_W = SLIDE_W - 2 * LEFT
@@ -89,8 +94,8 @@ def wrap(words, size, width, bold=False):
 # Drawing helpers
 
 
-def style(run, size, color, bold=False, italic=False, tracking=0):
-    run.font.name = FONT
+def style(run, size, color, bold=False, italic=False, tracking=0, font=None):
+    run.font.name = font or FONT
     run.font.size = Pt(size)
     run.font.color.rgb = color
     run.font.bold = bold
@@ -100,9 +105,12 @@ def style(run, size, color, bold=False, italic=False, tracking=0):
 
 
 def text(slide, x, y, w, h, paragraphs, size=16, color=INK, bold=False, align=PP_ALIGN.LEFT,
-         anchor=MSO_ANCHOR.TOP, space_after=0, line_spacing=None, tracking=0, name=None):
+         anchor=MSO_ANCHOR.TOP, space_after=0, line_spacing=None, tracking=0, name=None, display=False):
     """paragraphs: a string, or a list of paragraphs; a paragraph is a string or a list of
-    (text, options) runs, where options may set size, color, bold, italic and tracking."""
+    (text, options) runs, where options may set size, color, bold, italic and tracking.
+    display=True sets it in the heading font, for big numbers."""
+    if display:
+        bold, tracking = HEAD_BOLD, size * HEAD_TRACKING
     box = slide.shapes.add_textbox(Inches(x), Inches(y), Inches(w), Inches(h))
     if name:
         box.name = name
@@ -120,7 +128,7 @@ def text(slide, x, y, w, h, paragraphs, size=16, color=INK, bold=False, align=PP
             run = p.add_run()
             run.text = content
             style(run, options.get("size", size), options.get("color", color), options.get("bold", bold),
-                  options.get("italic", False), options.get("tracking", tracking))
+                  options.get("italic", False), options.get("tracking", tracking), HEAD_FONT if display else None)
     return box
 
 
@@ -286,7 +294,7 @@ def title(slide, words, y=0.92, size=36, color=INK, h=0.75, w=CONTENT_W, x=LEFT)
         p.line_spacing = 0.95
         run = p.add_run()
         run.text = row
-        style(run, size, color, bold=True, tracking=-size / 30)
+        style(run, size, color, bold=HEAD_BOLD, tracking=size * HEAD_TRACKING, font=HEAD_FONT)
     return heading
 
 
@@ -360,9 +368,9 @@ def slide_problem(prs):
     # Who built it, and how to reach them: a white card, like a business card.
     by_x, by_y, by_w, by_h = LEFT, 5.8, split - 2 * LEFT, 1.05
     card(slide, by_x, by_y, by_w, by_h, name="Byline")
-    initials = "".join(word[0] for word in AUTHOR.split())
-    avatar = 0.56
-    pin(slide, by_x + 0.25, by_y + (by_h - avatar) / 2, initials, size=avatar, font_size=15)
+    avatar, avatar_y = 0.6, by_y + (by_h - 0.6) / 2
+    picture(slide, ROOT / "deck" / "images" / "avatar-fuyofulo.png", by_x + 0.23, avatar_y, avatar, name="GitHub avatar")
+    shape(slide, MSO_SHAPE.OVAL, by_x + 0.23, avatar_y, avatar, avatar, line=BORDER, name="Avatar ring")
     text(slide, by_x + 0.97, by_y + 0.27, 2.2, 0.22, "Built by", size=11, color=MUTED)
     text(slide, by_x + 0.97, by_y + 0.48, 2.2, 0.32, AUTHOR, size=18, bold=True, color=INK)
     column_w = max(0.183 + 0.08 + text_width(label, 11) + 0.05 for _, label, _ in CONTACTS)
@@ -661,7 +669,7 @@ def slide_questions(prs):
         fx = cx + index * (fw + 0.2)
         card(slide, fx, 5.3, fw, 1.45, name=f"Fact: {big}")
         badge(slide, fx + 0.2, 5.48, 0.42, icon_name, "green", MINT)
-        text(slide, fx + 0.72, 5.5, fw - 0.85, 0.4, big, size=20, bold=True, color=INK, tracking=-0.4)
+        text(slide, fx + 0.72, 5.5, fw - 0.85, 0.4, big, size=20, color=INK, display=True)
         text(slide, fx + 0.2, 6.0, fw - 0.4, 0.7, small, size=10.5, color=MUTED, line_spacing=1.05)
 
     # The weekly revenue chart for "recently", on the green panel.
@@ -740,7 +748,7 @@ def slide_results(prs):
     for index, (value, label, mark) in enumerate(stats):
         sx = LEFT + index * (sw + 0.3)
         card(slide, sx, 1.9, sw, 1.45, name=f"Pass mark {index + 1}")
-        text(slide, sx + 0.3, 2.02, sw - 1.1, 0.75, value, size=40, bold=True, color=INK, tracking=-1.2)
+        text(slide, sx + 0.3, 2.02, sw - 1.1, 0.75, value, size=40, color=INK, display=True)
         text(slide, sx + 0.3, 2.72, sw - 0.6, 0.3, label, size=14, color=INK_2)
         text(slide, sx + 0.3, 3.0, sw - 0.6, 0.25, mark, size=11, color=MUTED)
         badge(slide, sx + sw - 0.8, 2.12, 0.5, "circle-check", "green", MINT)
@@ -854,7 +862,7 @@ def slide_status(prs):
         text(slide, label_x, line_y + 0.92, label_w, 0.8, detail, size=14, color=ON_DEEP_2, align=align,
              line_spacing=1.1)
 
-    text(slide, LEFT, 6.25, 3, 0.6, "Questions?", size=32, bold=True, color=LIME, tracking=-1)
+    text(slide, LEFT, 6.25, 3, 0.6, "Questions?", size=32, color=LIME, display=True)
     contact_row(slide, SLIDE_W - LEFT, 6.38, size=14, color=ON_DEEP, align_right=True, gap=0.42)
 
 
