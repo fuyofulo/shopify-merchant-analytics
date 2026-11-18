@@ -1,15 +1,15 @@
 # Demo deck outline
 
-Six slides for the live demo. Q&A takes the last 4 minutes. `build_deck.py` turns this into `shopify-merchant-analytics.pptx`. The opening and closing slides are dark and the rest are light, in the app's own colours.
+Six slides for the live demo. Q&A takes the last 4 minutes. `build_deck.py` turns this into `shopify-merchant-analytics.pptx`. It uses Shopify's admin look: deep green opening and closing slides, light grey content slides with white cards, green accents and Lucide icons.
 
 1. **"jakets returnd last wk"** (the problem)
-   One real typo-filled request as the headline, with four more from `data/merchant-report-requests-2025-10-27.xlsx` as chat bubbles. The fix: ask the dashboard, get a chart in under 3 seconds.
+   One real typo-filled request as the headline, with four more from `data/merchant-report-requests-2025-10-27.xlsx` in a "Report requests" card. The fix: ask the dashboard, get a chart in under 3 seconds.
 
 2. **Type a question. Get a chart and an answer.** (the interface)
    The jacket returns screenshot in a browser window, with numbered pins for the steps, the exact dates and the short answer.
 
 3. **How a question becomes a chart** (for Tomasz and Hana)
-   The real objects at each step: the typed question → the report the AI asks for (Returns, Oct 20–26, Outerwear) → the rows our code returns → the bar chart and the one-sentence answer. The AI only chooses and fills in. Code does the dates, the maths and the chart.
+   Four cards, one per step, each showing the real thing at that step: the typed question → the report the AI asks for (Returns, Oct 20–26, Outerwear) → the rows our code returns → the bar chart and the one-sentence answer. The AI only chooses and fills in. Code does the dates, the maths and the chart.
 
 4. **Vague words become exact dates** (speed and "last week")
    A timeline showing the range each phrase becomes, next to the weekly revenue chart for "recently". Along the bottom: 2.4 s median to chart, 3 reports, no made-up charts.
