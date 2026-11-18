@@ -763,26 +763,25 @@ def slide_results(prs):
 def slide_status(prs):
     slide = new_slide(
         prs,
-        "So, is it ready for Black Friday? Yes. It's live on Vercel today and it passed Erik's questions. There "
-        "are three small steps before November 28, under an hour in total. First, put the AI key on the public "
-        "address: right now only the test preview has it. Second, add a few dollars of OpenRouter credits, "
-        "because the free plan stops at about 25 questions a day. Third, re-run the sweaters question to confirm "
-        "the fix. Then merchants can use it. Happy to take questions.",
+        "So, is it ready for Black Friday? Yes. It's live today at shopify-merchant-analytics.vercel.app, with the "
+        "AI key in place, and it passed Erik's questions. One step is left before November 28: add $10 of "
+        "OpenRouter credits. The free plan stops at about 25 questions a day; with credits it's about 500. The "
+        "sweaters fix from the last slide gets re-run as soon as the daily limit allows. Happy to take questions.",
         dark=True,
     )
     kicker(slide, "Status", y=0.8, color=LIME)
     title(slide, "Ready for Black Friday", y=1.15, size=60, color=ON_DEEP, h=1.0)
-    text(slide, LEFT, 2.3, CONTENT_W, 0.5, "Live today. Three small steps before November 28, under an hour in all.",
+    text(slide, LEFT, 2.3, CONTENT_W, 0.5,
+         [[("Live now at ", {}), ("shopify-merchant-analytics.vercel.app", {"bold": True, "color": ON_DEEP})]],
          size=22, color=ON_DEEP_2)
 
     line_y = 4.0
-    xs = [LEFT + 0.3 + index * (CONTENT_W - 0.6) / 4 for index in range(5)]
+    xs = [LEFT + 0.3, SLIDE_W / 2, SLIDE_W - LEFT - 0.3]
     line(slide, xs[0], line_y, xs[-1], line_y, DEEP_RULE, width=2, name="Timeline")
     stops = [
-        ("rocket", "Now", "Live on Vercel. Passed Erik's 20 questions.", True),
-        ("key-round", "Key on the public URL", "One command. Only the test preview has it today.", False),
-        ("coins", "Add AI credits", "OpenRouter's free plan stops at about 25 questions a day.", False),
-        ("refresh-cw", "Re-run one question", "The sweaters fix (AQ-15) is live. It needs a check.", False),
+        ("rocket", "Now", "Public URL live, with the AI key. Passed Erik's 20 questions.", True),
+        ("coins", "Add AI credits", "The free plan allows about 25 questions a day. $10 of OpenRouter credits "
+                                    "raises that to about 500.", False),
         ("flag", "Nov 28", "Black Friday. Ready for merchants.", True),
     ]
     for index, ((icon_name, heading, detail, milestone), x) in enumerate(zip(stops, xs)):
@@ -792,12 +791,12 @@ def slide_status(prs):
         else:
             badge(slide, x - d / 2, line_y - d / 2, d, icon_name, "lime", DEEP_CARD, ring=LIME)
         first, last = index == 0, index == len(stops) - 1
-        label_w = 1.8 if first or last else 2.7
+        label_w = 3.0 if first or last else 3.6
         label_x = x - d / 2 if first else (x - label_w + d / 2 if last else x - label_w / 2)
         align = PP_ALIGN.LEFT if first else (PP_ALIGN.RIGHT if last else PP_ALIGN.CENTER)
-        text(slide, label_x, line_y + 0.5, label_w, 0.4, heading, size=17, bold=True,
+        text(slide, label_x, line_y + 0.5, label_w, 0.4, heading, size=18, bold=True,
              color=LIME if milestone else ON_DEEP, align=align)
-        text(slide, label_x, line_y + 0.9, label_w, 0.8, detail, size=13, color=ON_DEEP_2, align=align,
+        text(slide, label_x, line_y + 0.92, label_w, 0.8, detail, size=14, color=ON_DEEP_2, align=align,
              line_spacing=1.1)
 
     text(slide, LEFT, 6.25, 6, 0.6, "Questions?", size=32, bold=True, color=LIME, tracking=-1)

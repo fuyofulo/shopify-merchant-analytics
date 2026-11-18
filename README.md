@@ -2,6 +2,8 @@
 
 A chat dashboard for a Shopify store. The merchant asks a question in their own words, like "jakets returnd last wk", and gets a chart and a short answer.
 
+Live at https://shopify-merchant-analytics.vercel.app (free AI model, about 25 questions a day).
+
 ![Jacket returns last week: bar chart with the tooltip on Alpine Down Parka showing 3 returned units](docs/screenshots/jacket-returns-tooltip.png)
 
 ## How it works
@@ -101,7 +103,7 @@ npm run dev                   # http://localhost:3000
 npm test                      # 42 tests, no key needed
 ```
 
-To deploy, run `vercel link`, then `vercel env add OPENROUTER_API_KEY preview --sensitive`, then `vercel deploy`. The key lives only in Vercel's encrypted settings and in `.env.local`, which git ignores.
+To deploy, run `vercel link`, then `vercel env add OPENROUTER_API_KEY production --sensitive` (and again with `preview`), then `vercel deploy --prod`. The key lives only in Vercel's encrypted settings and in `.env.local`, which git ignores.
 
 ## Code
 

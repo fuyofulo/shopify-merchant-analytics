@@ -18,4 +18,4 @@ Six slides for the live demo. Q&A takes the last 4 minutes. `build_deck.py` turn
    19/20 right report, 0 crashes, 4.63 s slowest. A native chart of seconds to chart per question, with the 5 s pass mark as a dashed line. AQ-15 is the one miss: fixed, but not re-run yet.
 
 6. **Ready for Black Friday** (for Priya)
-   A timeline from now to Nov 28 with three small steps: put the key on the public URL, add OpenRouter credits, and re-run the sweaters question.
+   Live now at shopify-merchant-analytics.vercel.app, with the AI key. A timeline from now to Nov 28 with one step left: $10 of OpenRouter credits, which lifts the free limit from about 25 questions a day to about 500.
