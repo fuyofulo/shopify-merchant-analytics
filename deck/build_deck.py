@@ -296,7 +296,7 @@ def footer(slide, number, number_on_panel=False):
          color=ON_DEEP_MUTED if number_on_panel else MUTED, align=PP_ALIGN.RIGHT)
 
 
-AUTHOR = "fuyofulo"
+AUTHOR = "Zaid Khan"
 CONTACTS = [
     ("github", "github.com/fuyofulo", "https://github.com/fuyofulo"),
     ("x", "x.com/fuyofulo", "https://x.com/fuyofulo"),
@@ -304,18 +304,23 @@ CONTACTS = [
 ]
 
 
-def contact_row(slide, x, y, size=12, color=ON_DEEP_2, icon_color="lime", align_right=False, gap=0.34):
-    """GitHub, X and email in one row, each one a link. x is the row's left edge, or its right edge."""
+def contact_row(slide, x, y, size=12, color=ON_DEEP_2, icon_color="lime", align_right=False, gap=0.34,
+                stacked=False):
+    """GitHub, X and email, each one a link: in one row (x is its left edge, or its right edge), or stacked
+    one under another with `gap` between their tops."""
     mark, mark_gap, row_h = size / 60, 0.08, size * 1.3 / 72
     widths = [mark + mark_gap + text_width(label, size) + 0.05 for _, label, _ in CONTACTS]
-    cursor = x - sum(widths) - gap * (len(widths) - 1) if align_right else x
-    for (icon_name, label, url), item_w in zip(CONTACTS, widths):
-        logo = icon(slide, icon_name, icon_color, cursor, y + (row_h - mark) / 2, mark)
+    cursor = x - sum(widths) - gap * (len(widths) - 1) if align_right and not stacked else x
+    for index, ((icon_name, label, url), item_w) in enumerate(zip(CONTACTS, widths)):
+        item_y = y + index * gap if stacked else y
+        logo = icon(slide, icon_name, icon_color, cursor, item_y + (row_h - mark) / 2, mark)
         logo.click_action.hyperlink.address = url
-        box = text(slide, cursor + mark + mark_gap, y, item_w - mark - mark_gap, row_h, label, size=size, color=color,
-                   anchor=MSO_ANCHOR.MIDDLE, name=f"Contact: {icon_name}")
+        box = text(slide, cursor + mark + mark_gap, item_y, item_w - mark - mark_gap, row_h, label, size=size,
+                   color=color, anchor=MSO_ANCHOR.MIDDLE, name=f"Contact: {icon_name}")
         box.click_action.hyperlink.address = url
-        cursor += item_w + gap
+        if not stacked:
+            cursor += item_w + gap
+    return max(widths)
 
 
 def quiet_chart_frame(chart):
@@ -342,20 +347,27 @@ def slide_problem(prs):
     )
     split = 7.45
     panel(slide, 0, w=split, name="Green half")
-    kicker(slide, "Shopify Merchant Analytics", y=0.75, color=LIME)
-    title(slide, "“Which jackets came\nback as returns\nlast week?”", y=1.2, size=48, color=ON_DEEP, h=2.2, w=6.6)
-    text(slide, LEFT, 3.62, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
-    text(slide, LEFT, 4.15, 6.1, 0.75,
+    kicker(slide, "Shopify Merchant Analytics", y=0.65, color=LIME)
+    title(slide, "“Which jackets came\nback as returns\nlast week?”", y=1.08, size=48, color=ON_DEEP, h=2.2, w=6.6)
+    text(slide, LEFT, 3.5, 6.2, 0.4, "A real merchant question from October 27.", size=16, color=ON_DEEP_MUTED)
+    text(slide, LEFT, 4.0, 6.1, 0.75,
          "Merchants ask in their own words. Before Black Friday they need answers in seconds.",
          size=20, color=ON_DEEP_2, line_spacing=1.1)
-    text(slide, LEFT, 5.12, 6.4, 0.75,
+    text(slide, LEFT, 4.92, 6.4, 0.75,
          ["Now they ask the dashboard,", [("and get a chart back in under 3 seconds.", {"color": LIME, "bold": True})]],
          size=20, color=ON_DEEP)
 
-    # Who built it, and how to reach them.
-    line(slide, LEFT, 6.12, split - LEFT, 6.12, DEEP_RULE, name="Byline rule")
-    text(slide, LEFT, 6.3, 6, 0.3, f"Built by {AUTHOR}", size=14, bold=True, color=ON_DEEP)
-    contact_row(slide, LEFT, 6.64, size=11, gap=0.32)
+    # Who built it, and how to reach them: a white card, like a business card.
+    by_x, by_y, by_w, by_h = LEFT, 5.8, split - 2 * LEFT, 1.05
+    card(slide, by_x, by_y, by_w, by_h, name="Byline")
+    initials = "".join(word[0] for word in AUTHOR.split())
+    avatar = 0.56
+    pin(slide, by_x + 0.25, by_y + (by_h - avatar) / 2, initials, size=avatar, font_size=15)
+    text(slide, by_x + 0.97, by_y + 0.27, 2.2, 0.22, "Built by", size=11, color=MUTED)
+    text(slide, by_x + 0.97, by_y + 0.48, 2.2, 0.32, AUTHOR, size=18, bold=True, color=INK)
+    column_w = max(0.183 + 0.08 + text_width(label, 11) + 0.05 for _, label, _ in CONTACTS)
+    contact_row(slide, by_x + by_w - 0.3 - column_w, by_y + 0.2, size=11, color=INK_2, icon_color="green",
+                gap=0.235, stacked=True)
 
     # The day's 30 requests, one square each, grouped by the report that answers them.
     x, w, y = split + 0.55, SLIDE_W - split - 0.55 - 0.55, 0.8
